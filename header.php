@@ -10,8 +10,11 @@
 
 <body>
     <header class="header">
-        <img src="image\logo.png" alt="KTM Logo">
+        <a href="index.php">
+            <img src="image/logo.png" alt="KTM Logo">
+        </a>
         <nav>
+            <a href="index.php">Home</a>
             <a href="reservation.php">Buy tickets</a>
             <a href="schedules.php">Schedules</a>
             <a href="login.php">Login/Register</a>

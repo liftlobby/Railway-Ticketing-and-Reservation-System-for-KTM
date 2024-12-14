@@ -73,11 +73,11 @@ body {
     background-image: url('image/komuter1.jpg'); /* Background image */
     background-size: cover;
     background-position: center;
-    color: #003366; /* Dark blue text */
+    color: #ffffff; /* White text */
 }
 
 .index-content h1, .index-content h2 {
-    color: #003366; /* Dark blue text */
+    color: #ffffff; /* White text */
 }
 
 .index-content button {
