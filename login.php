@@ -22,7 +22,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($result->num_rows > 0) {
         $_SESSION['loggedin'] = true;
         $_SESSION['username'] = $username;
-        header("Location: home.html");
+        header("Location: index.php");
         exit();
     } else {
         $error_message = "Invalid username or password, try <a href='login.php'>login</a> again.";
