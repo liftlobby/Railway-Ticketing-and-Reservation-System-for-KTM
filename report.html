@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KTM Help Center</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+            background-color: #f9f9f9;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #0047ab;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        header a {
+            text-decoration: none;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .search-bar {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .search-bar h2 {
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        .search-bar input[type="text"] {
+            width: 400px;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-bar button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: #0047ab;
+            color: white;
+            cursor: pointer;
+            margin-left: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .categories, .hot-questions {
+            margin: 30px auto;
+            padding: 20px;
+            width: 80%;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .categories h3, .hot-questions h3 {
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+
+        .categories div {
+            display: inline-block;
+            margin: 10px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: #f0f0f0;
+            width: 150px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .categories div:hover {
+            background-color: #0047ab;
+            color: white;
+        }
+
+        .hot-questions p {
+            font-size: 18px;
+            margin: 10px 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        footer {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #0047ab;
+            color: white;
+            text-align: center;
+        }
+
+        footer h3 {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        footer button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: white;
+            color: #0047ab;
+            cursor: pointer;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        footer button:hover {
+            background-color: #002f6c;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>KTM Help Center</h1>
+        <a href="#">KTM Policies</a>
+    </header>
+
+    <div class="search-bar">
+        <h2>Hi, how can we help?</h2>
+        <input type="text" placeholder="Search...">
+        <button>Search</button>
+    </div>
+
+    <div class="categories">
+        <h3>Categories</h3>
+        <div>Payment Issues</div>
+        <div>Ticketing Issues</div>
+        <div>Lost and Found</div>
+        <div>Other Issues</div>
+    </div>
+
+    <div class="hot-questions">
+        <h3>Hot Questions</h3>
+        <p>What is KTM's refund policy?</p>
+        <p>How to book tickets online?</p>
+        <p>Where can I find the train schedule?</p>
+    </div>
+
+    <footer>
+        <h3>Do You Have Any Other Questions?</h3>
+        <button>💬 Chat with us</button>
+        <button>📞 Call us</button>
+    </footer>
+</body>
+</html>
