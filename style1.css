@@ -1,0 +1,170 @@
+body {
+    font-family: Arial, sans-serif;
+    background: 'ktm-trains.jpg';
+    background-size: cover;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;    
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    background-color: rgba(255, 255, 255, 0.9); 
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+}
+
+h2.center {
+    text-align: center;
+    color: #333333;}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333333; }
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+    width: calc(100% - 20px);
+    padding: 10px;
+    margin-bottom: 20px;
+    border: 1px solid #cccccc; 
+    border-radius: 5px;
+}
+
+input[type="submit"] {
+    background-color: #007bff; 
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+input[type="submit"]:hover {
+    background-color: #0056b3;
+}
+/* Header Styles */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background-color: #003366; /* Dark blue background */
+    color: #ffcc00; /* Yellow text */
+    border-bottom: 1px solid #ffcc00; /* Yellow border */
+}
+
+.header img {
+    height: 50px;
+}
+
+.header nav {
+    display: flex;
+    gap: 20px;
+}
+
+.header nav a {
+    text-decoration: none;
+    color: #ffcc00; /* Yellow text */
+    font-weight: bold;
+}
+
+/* Footer Styles */
+.footer {
+    background-color: #003366; /* Dark blue background */
+    color: #ffcc00; /* Yellow text */
+    padding: 10px;
+    border-top: 1px solid #ffcc00; /* Yellow border */
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    font-size: 14px;
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+}
+
+.footer-content {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.footer-section {
+    flex: 1;
+    margin: 5px;
+}
+
+.footer-section h3 {
+    margin-bottom: 5px;
+    font-size: 16px;
+}
+
+.footer-section p, .footer-section a {
+    margin: 3px 0;
+    color: #ffcc00; /* Yellow text */
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.footer-section a img {
+    height: 20px;
+    margin-right: 5px;
+}
+
+/* Index Page Styles */
+.index-content {
+    text-align: center;
+    padding: 100px; /* Adjust padding here */
+    background-image: url('image/komuter1.jpg'); /* Background image */
+    background-size: cover;
+    background-position: center;
+    color: #ffffff; /* White text */
+    flex: 1;
+}
+
+.index-content h1, .index-content h2 {
+    color: #ffffff; /* White text */
+}
+
+.index-content button {
+    background-color: #003366; /* Dark blue background */
+    color: #ffcc00; /* Yellow text */
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.index-content button:hover {
+    background-color: #ffcc00; /* Yellow background */
+    color: #003366; /* Dark blue text */
+}
+
+/* About Us Page Styles */
+.about-us-content {
+    padding: 90px; /* Adjust padding here */
+    background-color: #ffffff; /* White background */
+    color: #003366; /* Dark blue text */
+    flex: 1;
+}
+
+.about-us-content h1, .about-us-content h2 {
+    color: #003366; /* Dark blue text */
+}
+
+.about-us-content p {
+    margin: 20px 0;
+    line-height: 1.6;
+}
