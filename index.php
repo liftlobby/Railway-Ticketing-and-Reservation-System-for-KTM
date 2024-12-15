@@ -17,7 +17,7 @@
         <br/><br/><br/>
         <button onclick="window.location.href='reservation.php'">Buy tickets</button>
 
-        <p>Does not have an account? <a href="register.php">Register Now!</a></p>
+        <p>Already have an account? <a href="login.php">Login</a></p>
     </div>
 
     <?php include 'footer.php'; ?>
