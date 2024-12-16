@@ -9,7 +9,7 @@
 </head>
 
 <body>
-    <?php include 'header.php'; ?>
+    <?php include 'Head_and_Foot\header.php'; ?>
 
     <div class="index-content">
         <h1>Welcome to KTM Ticketing and Reservation System</h1>
@@ -20,7 +20,7 @@
         <p>Already have an account? <a href="login.php">Login</a></p>
     </div>
 
-    <?php include 'footer.php'; ?>
+    <?php include 'Head_and_Foot\footer.php'; ?>
 </body>
 
 </html>

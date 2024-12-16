@@ -18,9 +18,9 @@
         </div>
         <div class="footer-section">
             <h3>Follow Us</h3>
-            <a href="#"><img src="image\social media\fb icon.png" alt="Facebook"></a>
-            <a href="#"><img src="image\social media\X icon.png" alt="Twitter"></a>
-            <a href="#"><img src="image\social media\Instagram_icon.png" alt="Instagram"></a>
+            <a href="https://www.facebook.com/ktmberhad/"><img src="image\social media\fb icon.png" alt="Facebook"></a>
+            <a href="https://x.com/ktm_berhad?lang=en"><img src="image\social media\X icon.png" alt="Twitter"></a>
+            <a href="https://www.instagram.com/ktmbofficial/?hl=en"><img src="image\social media\Instagram_icon.png" alt="Instagram"></a>
         </div>
         <div class="footer-section">
             <h3>Links</h3>
