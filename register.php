@@ -73,6 +73,7 @@
             <input type="password" id="password" name="password" required><br><br>
             <input type="submit" value="Submit">
         </form>
+        <a href="index.php">HOME</a>
     </div>
     <?php include 'Head_and_Foot\footer.php'; ?>
  

@@ -17,6 +17,7 @@
             <a href="#">Buy tickets</a>
             <a href="#">Schedules</a>
             <a href="login.php">Login/Register</a>
+            <a href="profile.php">Profile</a>
             <a href="about_us.php">About Us</a>
         </nav>
     </header>

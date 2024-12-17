@@ -112,7 +112,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         ?>
         <br>
-        <a href="index.php">HOME</a>
     </div>
     <?php include 'Head_and_Foot\footer.php'; ?>
 </body>
