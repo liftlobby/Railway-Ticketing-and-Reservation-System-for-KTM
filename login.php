@@ -1,119 +1,157 @@
 <?php
 session_start();
+require_once 'config/database.php';
+
+// If user is already logged in, redirect to index
+if (isset($_SESSION['user_id'])) {
+    header("Location: index.php");
+    exit();
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $servername = "localhost";
-    $username = "root";
-    $password = "";
-    $dbname = "railway_system";
-
-    $conn = new mysqli($servername, $username, $password, $dbname);
-
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error);
-    }
-
     $username = $_POST['username'];
     $password = $_POST['password'];
 
-    $sql = "SELECT * FROM users WHERE username='$username' AND password='$password'";
-    $result = $conn->query($sql);
+    // Use prepared statement to prevent SQL injection
+    $sql = "SELECT user_id, username FROM users WHERE username=? AND password=?";
+    $stmt = $conn->prepare($sql);
+    
+    if ($stmt === false) {
+        die("Error preparing statement: " . $conn->error);
+    }
+    
+    $stmt->bind_param("ss", $username, $password);
+    
+    if (!$stmt->execute()) {
+        die("Error executing statement: " . $stmt->error);
+    }
+    
+    $result = $stmt->get_result();
 
     if ($result->num_rows > 0) {
-        $_SESSION['loggedin'] = true;
-        $_SESSION['username'] = $username;
-        header("Location: home.html");
+        $user = $result->fetch_assoc();
+        $_SESSION['user_id'] = $user['user_id'];
+        $_SESSION['username'] = $user['username'];
+        
+        // Debug information
+        error_log("Login successful for user: " . $user['username'] . " (ID: " . $user['user_id'] . ")");
+        error_log("Session data: " . print_r($_SESSION, true));
+        
+        // Redirect to index page
+        header("Location: index.php");
         exit();
     } else {
-        $error_message = "Invalid username or password, try <a href='login.php'>login</a> again.";
+        $error_message = "Invalid username or password.";
+        error_log("Login failed for username: " . $username);
     }
-
-    $conn->close();
 }
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Login Page</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - KTM Railway System</title>
+    <link rel="stylesheet" href="style.css">
     <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: 'image/komuter1.jpg';
-        background-size: cover;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        height: 100vh;
-    }
+        .login-container {
+            max-width: 400px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
 
-    .container {
-        background-color: rgba(255, 255, 255, 0.9); 
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        width: 90%;
-        max-width: 400px;
-        text-align: center;
-        justify-self: center;    
-        align-self: center;
-    }
+        .login-container h2 {
+            color: #003366;
+            text-align: center;
+            margin-bottom: 20px;
+        }
 
-    h2.center {
-        text-align: center;
-        color: #333333;}
+        .form-group {
+            margin-bottom: 15px;
+        }
 
-    label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: bold;
-        color: #333333; }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #003366;
+        }
 
-    input[type="text"],
-    input[type="email"],
-    input[type="password"] {
-        width: calc(100% - 20px);
-        padding: 10px;
-        margin-bottom: 20px;
-        border: 1px solid #cccccc; 
-        border-radius: 5px;
-    }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
 
-    input[type="submit"] {
-        background-color: #007bff; 
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        width: 100%;
-    }
+        .login-button {
+            width: 100%;
+            padding: 10px;
+            background-color: #003366;
+            color: #ffcc00;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
 
-    input[type="submit"]:hover {
-        background-color: #0056b3;
-    }
+        .login-button:hover {
+            background-color: #ffcc00;
+            color: #003366;
+        }
+
+        .error-message {
+            color: #dc3545;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .register-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .register-link a {
+            color: #003366;
+            text-decoration: none;
+        }
+
+        .register-link a:hover {
+            text-decoration: underline;
+        }
     </style>
-
 </head>
 <body>
-    <?php include 'Head_and_Foot\header.php'; ?>
-    <div class="container">
-        <h2 class="center">Login Form</h2>
+    <?php require_once 'Head_and_Foot/header.php'; ?>
+
+    <div class="login-container">
+        <h2>Login</h2>
+        <?php if (isset($error_message)): ?>
+            <div class="error-message"><?php echo $error_message; ?></div>
+        <?php endif; ?>
+
         <form action="login.php" method="post">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" required><br><br>
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required><br><br>
-            <input type="submit" value="Login">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+
+            <button type="submit" class="login-button">Login</button>
         </form>
-        <p>Register <a href="register.php">here</a> if you have not.</p>
-        <?php
-        if (isset($error_message)) {
-            echo "<p style='color:red;'>$error_message</p>";
-        }
-        ?>
-        <br>
-        <a href="index.php">HOME</a>
+
+        <div class="register-link">
+            <p>Don't have an account? <a href="register.php">Register here</a></p>
+        </div>
     </div>
-    <?php include 'Head_and_Foot\footer.php'; ?>
+
+    <?php require_once 'Head_and_Foot/footer.php'; ?>
 </body>
 </html>

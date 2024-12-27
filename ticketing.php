@@ -1,4 +1,33 @@
 <!-- Ticketing & Reservation Page -->
+<?php
+session_start();
+require_once 'config/database.php';
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// Debug information
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Fetch available schedules with seat information
+$sql = "SELECT s.*, 
+               COALESCE(s.available_seats, 50) as available_seats,
+               (COALESCE(s.available_seats, 50) > 0) as is_available
+        FROM schedules s 
+        WHERE s.departure_time > NOW() 
+        ORDER BY s.departure_time ASC";
+
+$result = $conn->query($sql);
+$schedules = [];
+while ($row = $result->fetch_assoc()) {
+    $schedules[] = $row;
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,222 +35,147 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KTM Ticketing & Reservation</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f9f9f9;
-        }
-
-        header {
-            background-color: #0078D7;
-            color: white;
-            padding: 15px;
-            text-align: center;
-        }
-
-        .container {
-            max-width: 1000px;
+        .schedule-container {
+            max-width: 1200px;
             margin: 20px auto;
             padding: 20px;
+        }
+
+        .schedule-card {
             background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
-        }
-
-        .button {
-            display: inline-block;
-            margin: 10px 0;
-            padding: 10px 20px;
-            background-color: #0078D7;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            border: none;
-            cursor: pointer;
-        }
-
-        .button:hover {
-            background-color: #005bb5;
-        }
-
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        .table th, .table td {
-            padding: 10px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }
-
-        .table th {
-            background-color: #0078D7;
-            color: white;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>KTM Ticketing & Reservation System</h1>
-    </header>
-
-    <div class="container">
-        <h2>Available Tickets & Reservation</h2>
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Train</th>
-                    <th>Route</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Price</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Express 101</td>
-                    <td>Kuala Lumpur - Johor Bahru</td>
-                    <td>2024-12-20</td>
-                    <td>10:00 AM</td>
-                    <td>RM 60</td>
-                    <td><button class="button">Reserve</button></td>
-                </tr>
-                <tr>
-                    <td>Express 202</td>
-                    <td>Ipoh - Penang</td>
-                    <td>2024-12-21</td>
-                    <td>1:30 PM</td>
-                    <td>RM 40</td>
-                    <td><button class="button">Reserve</button></td>
-                </tr>
-                <tr>
-                    <td>Express 303</td>
-                    <td>Seremban - Melaka</td>
-                    <td>2024-12-22</td>
-                    <td>8:00 AM</td>
-                    <td>RM 30</td>
-                    <td><button class="button">Reserve</button></td>
-                </tr>
-                <tr>
-                    <td>Express 404</td>
-                    <td>Johor Bahru - Singapore</td>
-                    <td>2024-12-23</td>
-                    <td>3:00 PM</td>
-                    <td>RM 20</td>
-                    <td><button class="button">Reserve</button></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
-
-<!-- Admin Edit Page -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Edit Tickets</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f9f9f9;
-        }
-
-        header {
-            background-color: #0078D7;
-            color: white;
-            padding: 15px;
-            text-align: center;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 20px auto;
             padding: 20px;
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        form label {
-            display: block;
-            margin: 10px 0 5px;
+        .schedule-info {
+            flex: 1;
         }
 
-        form input, form select, form textarea {
-            width: calc(100% - 20px);
-            padding: 10px;
+        .schedule-time {
+            font-size: 1.2em;
+            color: #003366;
             margin-bottom: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
         }
 
-        .admin-options {
-            margin-top: 20px;
+        .schedule-stations {
+            color: #666;
+            margin-bottom: 10px;
         }
 
-        .button {
-            display: inline-block;
+        .schedule-price {
+            font-weight: bold;
+            color: #003366;
+        }
+
+        .seats-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
             margin: 10px 0;
+        }
+
+        .seats-available {
+            color: #28a745;
+        }
+
+        .seats-limited {
+            color: #ffc107;
+        }
+
+        .seats-unavailable {
+            color: #dc3545;
+        }
+
+        .book-button {
+            background: #003366;
+            color: #ffcc00;
             padding: 10px 20px;
-            background-color: #0078D7;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
+            transition: background-color 0.3s;
         }
 
-        .button:hover {
-            background-color: #005bb5;
+        .book-button:hover {
+            background: #002244;
         }
 
-        .button.delete {
-            background-color: red;
+        .book-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
         }
 
-        .button.delete:hover {
-            background-color: darkred;
+        .train-info {
+            margin: 10px 0;
+            color: #666;
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Admin - Edit Ticket Information</h1>
-    </header>
+    <?php require_once 'Head_and_Foot/header.php'; ?>
 
-    <div class="container">
-        <form>
-            <label for="train">Train</label>
-            <input type="text" id="train" name="train" placeholder="Enter train name">
+    <div class="schedule-container">
+        <h1>Available Train Schedules</h1>
+        
+        <?php if (empty($schedules)): ?>
+            <p>No schedules available at the moment.</p>
+        <?php else: ?>
+            <?php foreach ($schedules as $schedule): ?>
+                <div class="schedule-card">
+                    <div class="schedule-info">
+                        <div class="schedule-time">
+                            <strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['departure_time'])); ?><br>
+                            <strong>Arrival:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['arrival_time'])); ?>
+                        </div>
+                        
+                        <div class="schedule-stations">
+                            <strong>From:</strong> <?php echo htmlspecialchars($schedule['departure_station']); ?><br>
+                            <strong>To:</strong> <?php echo htmlspecialchars($schedule['arrival_station']); ?>
+                        </div>
+                        
+                        <div class="train-info">
+                            <strong>Train:</strong> <?php echo htmlspecialchars($schedule['train_number']); ?>
+                        </div>
+                        
+                        <div class="seats-info">
+                            <?php if ($schedule['available_seats'] > 10): ?>
+                                <span class="seats-available">
+                                    <?php echo $schedule['available_seats']; ?> seats available
+                                </span>
+                            <?php elseif ($schedule['available_seats'] > 0): ?>
+                                <span class="seats-limited">
+                                    Only <?php echo $schedule['available_seats']; ?> seats left!
+                                </span>
+                            <?php else: ?>
+                                <span class="seats-unavailable">Fully Booked</span>
+                            <?php endif; ?>
+                        </div>
 
-            <label for="route">Route</label>
-            <input type="text" id="route" name="route" placeholder="Enter route">
+                        <div class="schedule-price">
+                            Price: RM <?php echo number_format($schedule['price'], 2); ?>
+                        </div>
+                    </div>
 
-            <label for="date">Date</label>
-            <input type="date" id="date" name="date">
-
-            <label for="time">Time</label>
-            <input type="time" id="time" name="time">
-
-            <label for="price">Price</label>
-            <input type="number" id="price" name="price" placeholder="Enter price">
-
-            <div class="admin-options">
-                <button class="button" type="submit">Save Changes</button>
-                <button class="button delete" type="button">Delete</button>
-            </div>
-        </form>
+                    <form action="payment.php" method="POST">
+                        <input type="hidden" name="schedule_id" value="<?php echo $schedule['schedule_id']; ?>">
+                        <button type="submit" 
+                                class="book-button" 
+                                <?php echo $schedule['available_seats'] <= 0 ? 'disabled' : ''; ?>>
+                            <?php echo $schedule['available_seats'] > 0 ? 'Book Now' : 'Sold Out'; ?>
+                        </button>
+                    </form>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
+
+    <?php require_once 'Head_and_Foot/footer.php'; ?>
 </body>
 </html>

@@ -74,7 +74,6 @@
             <input type="submit" value="Submit">
         </form>
     </div>
-    <?php include 'Head_and_Foot\footer.php'; ?>
  
 </body>
 </html>
