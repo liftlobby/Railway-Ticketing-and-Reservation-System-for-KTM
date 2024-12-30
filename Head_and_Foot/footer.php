@@ -24,7 +24,6 @@
         </div>
         <div class="footer-section">
             <h3>Links</h3>
-            <a href="about_us.php">About Us</a><br>
             <a href="staff\dashboard.php">Staff Login</a>
         </div>
     </div>

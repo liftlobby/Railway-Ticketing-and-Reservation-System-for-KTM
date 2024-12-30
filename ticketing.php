@@ -13,19 +13,27 @@ if (!isset($_SESSION['user_id'])) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Fetch available schedules with seat information
+// Set timezone to match your server's timezone
+date_default_timezone_set('Asia/Kuala_Lumpur');
+
+// Add buffer time (e.g., 30 minutes before departure)
+$buffer_time = date('Y-m-d H:i:s', strtotime('+30 minutes'));
+$current_time = date('Y-m-d H:i:s');
+
+// Fetch only available schedules
 $sql = "SELECT s.*, 
                COALESCE(s.available_seats, 50) as available_seats,
-               (COALESCE(s.available_seats, 50) > 0) as is_available
+               (COALESCE(s.available_seats, 50) > 0) as is_available,
+               CASE 
+                   WHEN s.departure_time <= DATE_ADD(NOW(), INTERVAL 30 MINUTE) THEN 'closing'
+                   ELSE 'available'
+               END as booking_status
         FROM schedules s 
-        WHERE s.departure_time > NOW() 
+        WHERE s.departure_time > NOW()
+        AND COALESCE(s.available_seats, 50) > 0
         ORDER BY s.departure_time ASC";
 
 $result = $conn->query($sql);
-$schedules = [];
-while ($row = $result->fetch_assoc()) {
-    $schedules[] = $row;
-}
 ?>
 
 <!DOCTYPE html>
@@ -38,20 +46,31 @@ while ($row = $result->fetch_assoc()) {
     <link rel="stylesheet" href="style.css">
     <style>
         .schedule-container {
-            max-width: 1200px;
+            max-width: 800px;
             margin: 20px auto;
             padding: 20px;
         }
 
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: minmax(350px, 600px);
+            gap: 20px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
         .schedule-card {
             background: white;
+            border: 1px solid #eee;
             border-radius: 8px;
             padding: 20px;
-            margin-bottom: 20px;
+            transition: transform 0.2s;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        }
+
+        .schedule-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .schedule-info {
@@ -79,18 +98,24 @@ while ($row = $result->fetch_assoc()) {
             padding: 10px;
             border-radius: 4px;
             margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .seats-available {
             color: #28a745;
         }
 
-        .seats-limited {
-            color: #ffc107;
+        .seats-closing {
+            color: #ff6b6b;
+            animation: blink 1s infinite;
         }
 
-        .seats-unavailable {
-            color: #dc3545;
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
 
         .book-button {
@@ -101,19 +126,80 @@ while ($row = $result->fetch_assoc()) {
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.3s;
+            width: 100%;
+            margin-top: 10px;
         }
 
         .book-button:hover {
             background: #002244;
         }
 
-        .book-button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
+        .book-button.closing {
+            background: #ff6b6b;
         }
 
         .train-info {
             margin: 10px 0;
+            color: #666;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .status-badge.closing {
+            background: #ff6b6b;
+            color: white;
+            animation: blink 1s infinite;
+        }
+
+        .status-badge.available {
+            background: #28a745;
+            color: white;
+        }
+
+        .ticket-quantity {
+            margin: 15px 0;
+        }
+
+        .ticket-quantity label {
+            display: block;
+            margin-bottom: 5px;
+            color: #003366;
+        }
+
+        .ticket-quantity select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+
+        .total-price {
+            font-size: 1.1em;
+            color: #003366;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .page-title {
+            color: #003366;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .no-schedules {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             color: #666;
         }
     </style>
@@ -122,60 +208,80 @@ while ($row = $result->fetch_assoc()) {
     <?php require_once 'Head_and_Foot/header.php'; ?>
 
     <div class="schedule-container">
-        <h1>Available Train Schedules</h1>
-        
-        <?php if (empty($schedules)): ?>
-            <p>No schedules available at the moment.</p>
-        <?php else: ?>
-            <?php foreach ($schedules as $schedule): ?>
-                <div class="schedule-card">
-                    <div class="schedule-info">
-                        <div class="schedule-time">
-                            <strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['departure_time'])); ?><br>
-                            <strong>Arrival:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['arrival_time'])); ?>
-                        </div>
-                        
-                        <div class="schedule-stations">
-                            <strong>From:</strong> <?php echo htmlspecialchars($schedule['departure_station']); ?><br>
-                            <strong>To:</strong> <?php echo htmlspecialchars($schedule['arrival_station']); ?>
-                        </div>
-                        
-                        <div class="train-info">
-                            <strong>Train:</strong> <?php echo htmlspecialchars($schedule['train_number']); ?>
-                        </div>
-                        
-                        <div class="seats-info">
-                            <?php if ($schedule['available_seats'] > 10): ?>
-                                <span class="seats-available">
-                                    <?php echo $schedule['available_seats']; ?> seats available
-                                </span>
-                            <?php elseif ($schedule['available_seats'] > 0): ?>
-                                <span class="seats-limited">
-                                    Only <?php echo $schedule['available_seats']; ?> seats left!
-                                </span>
-                            <?php else: ?>
-                                <span class="seats-unavailable">Fully Booked</span>
-                            <?php endif; ?>
-                        </div>
+        <h1 class="page-title">Available Train Tickets</h1>
 
-                        <div class="schedule-price">
-                            Price: RM <?php echo number_format($schedule['price'], 2); ?>
+        <?php if ($result->num_rows == 0): ?>
+            <div class="no-schedules">
+                <p>No available trains at the moment.</p>
+                <p>Please check back later for new schedules.</p>
+            </div>
+        <?php else: ?>
+            <div class="schedule-grid">
+                <?php while ($schedule = $result->fetch_assoc()): ?>
+                    <div class="schedule-card">
+                        <div class="schedule-info">
+                            <div class="schedule-time">
+                                <strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['departure_time'])); ?><br>
+                                <strong>Arrival:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['arrival_time'])); ?>
+                            </div>
+                            <div class="schedule-stations">
+                                <strong>From:</strong> <?php echo htmlspecialchars($schedule['departure_station']); ?><br>
+                                <strong>To:</strong> <?php echo htmlspecialchars($schedule['arrival_station']); ?>
+                            </div>
+                            <div class="train-info">
+                                <strong>Train:</strong> <?php echo htmlspecialchars($schedule['train_number']); ?>
+                            </div>
+                            <div class="schedule-price">
+                                <strong>Price:</strong> RM <?php echo number_format($schedule['price'], 2); ?>
+                            </div>
+                            <div class="seats-info <?php echo $schedule['booking_status'] == 'closing' ? 'seats-closing' : 'seats-available'; ?>">
+                                <i class="fas fa-chair"></i>
+                                <?php echo $schedule['available_seats']; ?> seats available
+                                <?php if ($schedule['booking_status'] == 'closing'): ?>
+                                    <span class="status-badge closing">Closing Soon</span>
+                                <?php else: ?>
+                                    <span class="status-badge available">Available</span>
+                                <?php endif; ?>
+                            </div>
+                            <form action="process_booking.php" method="POST">
+                                <input type="hidden" name="schedule_id" value="<?php echo $schedule['schedule_id']; ?>">
+                                <input type="hidden" name="price" value="<?php echo $schedule['price']; ?>">
+                                <div class="ticket-quantity">
+                                    <label for="ticket_quantity_<?php echo $schedule['schedule_id']; ?>">
+                                        Number of Tickets:
+                                    </label>
+                                    <select name="ticket_quantity" 
+                                            id="ticket_quantity_<?php echo $schedule['schedule_id']; ?>"
+                                            onchange="updateTotalPrice(this, <?php echo $schedule['price']; ?>)">
+                                        <?php for ($i = 1; $i <= min(5, $schedule['available_seats']); $i++): ?>
+                                            <option value="<?php echo $i; ?>"><?php echo $i; ?></option>
+                                        <?php endfor; ?>
+                                    </select>
+                                    <div class="total-price" id="total_price_<?php echo $schedule['schedule_id']; ?>">
+                                        Total: RM <?php echo number_format($schedule['price'], 2); ?>
+                                    </div>
+                                </div>
+                                <button type="submit" 
+                                        class="book-button <?php echo $schedule['booking_status'] == 'closing' ? 'closing' : ''; ?>">
+                                    Book Now
+                                </button>
+                            </form>
                         </div>
                     </div>
-
-                    <form action="payment.php" method="POST">
-                        <input type="hidden" name="schedule_id" value="<?php echo $schedule['schedule_id']; ?>">
-                        <button type="submit" 
-                                class="book-button" 
-                                <?php echo $schedule['available_seats'] <= 0 ? 'disabled' : ''; ?>>
-                            <?php echo $schedule['available_seats'] > 0 ? 'Book Now' : 'Sold Out'; ?>
-                        </button>
-                    </form>
-                </div>
-            <?php endforeach; ?>
+                <?php endwhile; ?>
+            </div>
         <?php endif; ?>
     </div>
 
     <?php require_once 'Head_and_Foot/footer.php'; ?>
+
+    <script>
+    function updateTotalPrice(select, basePrice) {
+        const quantity = select.value;
+        const totalPrice = (quantity * basePrice).toFixed(2);
+        const scheduleId = select.id.split('_')[2];
+        document.getElementById(`total_price_${scheduleId}`).innerHTML = `Total: RM ${totalPrice}`;
+    }
+    </script>
 </body>
 </html>

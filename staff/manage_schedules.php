@@ -8,68 +8,23 @@ if (!isset($_SESSION['staff_id'])) {
     exit();
 }
 
-// Handle schedule creation
-if (isset($_POST['create_schedule'])) {
-    $train_number = $_POST['train_number'];
-    $departure_station = $_POST['departure_station'];
-    $arrival_station = $_POST['arrival_station'];
-    $departure_time = $_POST['departure_time'];
-    $arrival_time = $_POST['arrival_time'];
-    $price = $_POST['price'];
-    $available_seats = $_POST['available_seats'];
-    
-    $stmt = $conn->prepare("INSERT INTO schedules (train_number, departure_station, arrival_station, departure_time, arrival_time, price, available_seats) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssssii", $train_number, $departure_station, $arrival_station, $departure_time, $arrival_time, $price, $available_seats);
-    
-    if ($stmt->execute()) {
-        $_SESSION['success_message'] = "Schedule created successfully!";
-    } else {
-        $_SESSION['error_message'] = "Error creating schedule: " . $conn->error;
-    }
-    header("Location: manage_schedules.php");
-    exit();
-}
-
-// Handle schedule deletion
-if (isset($_POST['delete_schedule'])) {
-    $schedule_id = $_POST['schedule_id'];
-    $stmt = $conn->prepare("DELETE FROM schedules WHERE schedule_id = ?");
-    $stmt->bind_param("i", $schedule_id);
-    
-    if ($stmt->execute()) {
-        $_SESSION['success_message'] = "Schedule deleted successfully!";
-    } else {
-        $_SESSION['error_message'] = "Error deleting schedule: " . $conn->error;
-    }
-    header("Location: manage_schedules.php");
-    exit();
-}
-
-// Handle schedule update
-if (isset($_POST['update_schedule'])) {
-    $schedule_id = $_POST['schedule_id'];
-    $train_number = $_POST['train_number'];
-    $departure_station = $_POST['departure_station'];
-    $arrival_station = $_POST['arrival_station'];
-    $departure_time = $_POST['departure_time'];
-    $arrival_time = $_POST['arrival_time'];
-    $price = $_POST['price'];
-    $available_seats = $_POST['available_seats'];
-    
-    $stmt = $conn->prepare("UPDATE schedules SET train_number = ?, departure_station = ?, arrival_station = ?, departure_time = ?, arrival_time = ?, price = ?, available_seats = ? WHERE schedule_id = ?");
-    $stmt->bind_param("sssssiii", $train_number, $departure_station, $arrival_station, $departure_time, $arrival_time, $price, $available_seats, $schedule_id);
-    
-    if ($stmt->execute()) {
-        $_SESSION['success_message'] = "Schedule updated successfully!";
-    } else {
-        $_SESSION['error_message'] = "Error updating schedule: " . $conn->error;
-    }
-    header("Location: manage_schedules.php");
-    exit();
-}
-
 // Fetch all schedules
-$schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
+$sql = "SELECT * FROM schedules ORDER BY departure_time DESC";
+$schedules = $conn->query($sql);
+
+// Get status badge color
+function getStatusBadgeColor($status) {
+    switch ($status) {
+        case 'on_time':
+            return 'success';
+        case 'delayed':
+            return 'warning';
+        case 'cancelled':
+            return 'danger';
+        default:
+            return 'secondary';
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -89,6 +44,7 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
             padding: 20px;
             background-color: #343a40;
             color: white;
+            width: 250px;
         }
         .content {
             margin-left: 250px;
@@ -97,12 +53,16 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
         .nav-link {
             color: white;
             margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .nav-link:hover {
             color: #17a2b8;
         }
-        .alert {
-            margin-top: 20px;
+        .nav-link.active {
+            background-color: #0056b3;
+            color: white;
         }
     </style>
 </head>
@@ -125,8 +85,11 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
                     <a class="nav-link" href="manage_users.php">
                         <i class='bx bx-user'></i> Manage Users
                     </a>
+                    <a class="nav-link" href="scan_qr.php">
+                        <i class='bx bx-qr-scan'></i> Scan QR
+                    </a>
                     <?php if ($_SESSION['staff_role'] === 'admin'): ?>
-                    <a class="nav-link" href="manage_staffs.php">
+                    <a class="nav-link" href="manage_staff.php">
                         <i class='bx bx-group'></i> Manage Staff
                     </a>
                     <?php endif; ?>
@@ -138,30 +101,12 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
 
             <!-- Main Content -->
             <div class="col-md-10 content">
-                <h2>Manage Schedules</h2>
-
-                <?php if (isset($_SESSION['success_message'])): ?>
-                    <div class="alert alert-success">
-                        <?php 
-                        echo $_SESSION['success_message']; 
-                        unset($_SESSION['success_message']);
-                        ?>
-                    </div>
-                <?php endif; ?>
-
-                <?php if (isset($_SESSION['error_message'])): ?>
-                    <div class="alert alert-danger">
-                        <?php 
-                        echo $_SESSION['error_message']; 
-                        unset($_SESSION['error_message']);
-                        ?>
-                    </div>
-                <?php endif; ?>
-                
-                <!-- Add Schedule Button -->
-                <button class="btn btn-primary mt-3 mb-3" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
-                    <i class='bx bx-plus'></i> Add New Schedule
-                </button>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>Manage Schedules</h2>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addScheduleModal">
+                        <i class='bx bx-plus'></i> Add New Schedule
+                    </button>
+                </div>
 
                 <div class="card">
                     <div class="card-body">
@@ -169,40 +114,47 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
-                                        <th>Train Number</th>
-                                        <th>Departure Station</th>
-                                        <th>Arrival Station</th>
-                                        <th>Departure Time</th>
-                                        <th>Arrival Time</th>
-                                        <th>Price (RM)</th>
-                                        <th>Available Seats</th>
+                                        <th>ID</th>
+                                        <th>Train</th>
+                                        <th>From</th>
+                                        <th>To</th>
+                                        <th>Departure</th>
+                                        <th>Arrival</th>
+                                        <th>Platform</th>
+                                        <th>Price</th>
+                                        <th>Seats</th>
+                                        <th>Status</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php while ($schedule = $schedules->fetch_assoc()): ?>
                                     <tr>
+                                        <td><?php echo $schedule['schedule_id']; ?></td>
                                         <td><?php echo htmlspecialchars($schedule['train_number']); ?></td>
                                         <td><?php echo htmlspecialchars($schedule['departure_station']); ?></td>
                                         <td><?php echo htmlspecialchars($schedule['arrival_station']); ?></td>
                                         <td><?php echo date('d M Y, h:i A', strtotime($schedule['departure_time'])); ?></td>
                                         <td><?php echo date('d M Y, h:i A', strtotime($schedule['arrival_time'])); ?></td>
-                                        <td><?php echo number_format($schedule['price'], 2); ?></td>
+                                        <td><?php echo htmlspecialchars($schedule['platform_number'] ?? 'TBA'); ?></td>
+                                        <td>RM <?php echo number_format($schedule['price'], 2); ?></td>
                                         <td><?php echo $schedule['available_seats']; ?></td>
                                         <td>
-                                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" 
-                                                    data-bs-target="#editModal<?php echo $schedule['schedule_id']; ?>">
-                                                Edit
+                                            <span class="badge bg-<?php echo getStatusBadgeColor($schedule['train_status']); ?>">
+                                                <?php echo ucfirst(str_replace('_', ' ', $schedule['train_status'])); ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $schedule['schedule_id']; ?>">
+                                                <i class='bx bx-edit'></i>
                                             </button>
-                                            <form action="" method="POST" class="d-inline" 
-                                                  onsubmit="return confirm('Are you sure you want to delete this schedule?');">
-                                                <input type="hidden" name="schedule_id" value="<?php echo $schedule['schedule_id']; ?>">
-                                                <button type="submit" name="delete_schedule" class="btn btn-danger btn-sm">Delete</button>
-                                            </form>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteSchedule(<?php echo $schedule['schedule_id']; ?>)">
+                                                <i class='bx bx-trash'></i>
+                                            </button>
                                         </td>
                                     </tr>
 
-                                    <!-- Edit Modal -->
+                                    <!-- Edit Schedule Modal -->
                                     <div class="modal fade" id="editModal<?php echo $schedule['schedule_id']; ?>" tabindex="-1">
                                         <div class="modal-dialog">
                                             <div class="modal-content">
@@ -210,57 +162,57 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
                                                     <h5 class="modal-title">Edit Schedule</h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
-                                                <form action="" method="POST">
-                                                    <div class="modal-body">
+                                                <div class="modal-body">
+                                                    <form action="schedule_actions.php" method="POST">
+                                                        <input type="hidden" name="action" value="edit">
                                                         <input type="hidden" name="schedule_id" value="<?php echo $schedule['schedule_id']; ?>">
                                                         
                                                         <div class="mb-3">
-                                                            <label class="form-label">Train Number</label>
-                                                            <input type="text" name="train_number" class="form-control" 
-                                                                   value="<?php echo htmlspecialchars($schedule['train_number']); ?>" required>
+                                                            <label>Train Number</label>
+                                                            <input type="text" class="form-control" name="train_number" value="<?php echo htmlspecialchars($schedule['train_number']); ?>" required>
                                                         </div>
-
                                                         <div class="mb-3">
-                                                            <label class="form-label">Departure Station</label>
-                                                            <input type="text" name="departure_station" class="form-control" 
-                                                                   value="<?php echo htmlspecialchars($schedule['departure_station']); ?>" required>
+                                                            <label>Departure Station</label>
+                                                            <input type="text" class="form-control" name="departure_station" value="<?php echo htmlspecialchars($schedule['departure_station']); ?>" required>
                                                         </div>
-
                                                         <div class="mb-3">
-                                                            <label class="form-label">Arrival Station</label>
-                                                            <input type="text" name="arrival_station" class="form-control" 
-                                                                   value="<?php echo htmlspecialchars($schedule['arrival_station']); ?>" required>
+                                                            <label>Arrival Station</label>
+                                                            <input type="text" class="form-control" name="arrival_station" value="<?php echo htmlspecialchars($schedule['arrival_station']); ?>" required>
                                                         </div>
-
                                                         <div class="mb-3">
-                                                            <label class="form-label">Departure Time</label>
-                                                            <input type="datetime-local" name="departure_time" class="form-control" 
-                                                                   value="<?php echo date('Y-m-d\TH:i', strtotime($schedule['departure_time'])); ?>" required>
+                                                            <label>Departure Time</label>
+                                                            <input type="datetime-local" class="form-control" name="departure_time" value="<?php echo date('Y-m-d\TH:i', strtotime($schedule['departure_time'])); ?>" required>
                                                         </div>
-
                                                         <div class="mb-3">
-                                                            <label class="form-label">Arrival Time</label>
-                                                            <input type="datetime-local" name="arrival_time" class="form-control" 
-                                                                   value="<?php echo date('Y-m-d\TH:i', strtotime($schedule['arrival_time'])); ?>" required>
+                                                            <label>Arrival Time</label>
+                                                            <input type="datetime-local" class="form-control" name="arrival_time" value="<?php echo date('Y-m-d\TH:i', strtotime($schedule['arrival_time'])); ?>" required>
                                                         </div>
-
                                                         <div class="mb-3">
-                                                            <label class="form-label">Price (RM)</label>
-                                                            <input type="number" step="0.01" name="price" class="form-control" 
-                                                                   value="<?php echo $schedule['price']; ?>" required>
+                                                            <label>Platform Number</label>
+                                                            <input type="text" class="form-control" name="platform_number" value="<?php echo htmlspecialchars($schedule['platform_number'] ?? ''); ?>">
                                                         </div>
-
                                                         <div class="mb-3">
-                                                            <label class="form-label">Available Seats</label>
-                                                            <input type="number" name="available_seats" class="form-control" 
-                                                                   value="<?php echo $schedule['available_seats']; ?>" required>
+                                                            <label>Price (RM)</label>
+                                                            <input type="number" class="form-control" name="price" value="<?php echo $schedule['price']; ?>" step="0.01" required>
                                                         </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                        <button type="submit" name="update_schedule" class="btn btn-primary">Save Changes</button>
-                                                    </div>
-                                                </form>
+                                                        <div class="mb-3">
+                                                            <label>Available Seats</label>
+                                                            <input type="number" class="form-control" name="available_seats" value="<?php echo $schedule['available_seats']; ?>" required>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label>Status</label>
+                                                            <select class="form-control" name="train_status" required>
+                                                                <option value="on_time" <?php echo $schedule['train_status'] === 'on_time' ? 'selected' : ''; ?>>On Time</option>
+                                                                <option value="delayed" <?php echo $schedule['train_status'] === 'delayed' ? 'selected' : ''; ?>>Delayed</option>
+                                                                <option value="cancelled" <?php echo $schedule['train_status'] === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -282,52 +234,76 @@ $schedules = $conn->query("SELECT * FROM schedules ORDER BY departure_time");
                     <h5 class="modal-title">Add New Schedule</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="" method="POST">
-                    <div class="modal-body">
+                <div class="modal-body">
+                    <form action="schedule_actions.php" method="POST">
+                        <input type="hidden" name="action" value="add">
+                        
                         <div class="mb-3">
-                            <label class="form-label">Train Number</label>
-                            <input type="text" name="train_number" class="form-control" required>
+                            <label>Train Number</label>
+                            <input type="text" class="form-control" name="train_number" required>
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label">Departure Station</label>
-                            <input type="text" name="departure_station" class="form-control" required>
+                            <label>Departure Station</label>
+                            <input type="text" class="form-control" name="departure_station" required>
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label">Arrival Station</label>
-                            <input type="text" name="arrival_station" class="form-control" required>
+                            <label>Arrival Station</label>
+                            <input type="text" class="form-control" name="arrival_station" required>
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label">Departure Time</label>
-                            <input type="datetime-local" name="departure_time" class="form-control" required>
+                            <label>Departure Time</label>
+                            <input type="datetime-local" class="form-control" name="departure_time" required>
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label">Arrival Time</label>
-                            <input type="datetime-local" name="arrival_time" class="form-control" required>
+                            <label>Arrival Time</label>
+                            <input type="datetime-local" class="form-control" name="arrival_time" required>
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label">Price (RM)</label>
-                            <input type="number" step="0.01" name="price" class="form-control" required>
+                            <label>Platform Number</label>
+                            <input type="text" class="form-control" name="platform_number">
                         </div>
-
                         <div class="mb-3">
-                            <label class="form-label">Available Seats</label>
-                            <input type="number" name="available_seats" class="form-control" required>
+                            <label>Price (RM)</label>
+                            <input type="number" class="form-control" name="price" step="0.01" required>
                         </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" name="create_schedule" class="btn btn-primary">Create Schedule</button>
-                    </div>
-                </form>
+                        <div class="mb-3">
+                            <label>Available Seats</label>
+                            <input type="number" class="form-control" name="available_seats" value="100" required>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-primary">Add Schedule</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function deleteSchedule(scheduleId) {
+            if (confirm('Are you sure you want to delete this schedule?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'schedule_actions.php';
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'delete';
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'schedule_id';
+                idInput.value = scheduleId;
+                
+                form.appendChild(actionInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
 </body>
 </html>
