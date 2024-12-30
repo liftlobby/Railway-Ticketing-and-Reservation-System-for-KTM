@@ -9,8 +9,6 @@ session_start();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Your existing styles */
-        
         .alert {
             padding: 15px;
             margin: 20px auto;

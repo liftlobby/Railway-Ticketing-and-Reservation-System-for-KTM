@@ -8,68 +8,9 @@ if (!isset($_SESSION['staff_id'])) {
     exit();
 }
 
-// Handle ticket edit
-if (isset($_POST['edit_ticket'])) {
-    $ticket_id = $_POST['ticket_id'];
-    $schedule_id = $_POST['schedule_id'];
-    $seat_number = $_POST['seat_number'];
-    $status = $_POST['status'];
-    $payment_status = $_POST['payment_status'];
-    $payment_amount = $_POST['payment_amount'];
-    
-    $stmt = $conn->prepare("UPDATE tickets SET 
-        schedule_id = ?, 
-        seat_number = ?, 
-        status = ?, 
-        payment_status = ?, 
-        payment_amount = ?,
-        updated_at = NOW()
-        WHERE ticket_id = ?");
-    $stmt->bind_param("isssdi", $schedule_id, $seat_number, $status, $payment_status, $payment_amount, $ticket_id);
-    
-    if ($stmt->execute()) {
-        $_SESSION['success_message'] = "Ticket updated successfully!";
-    } else {
-        $_SESSION['error_message'] = "Error updating ticket: " . $conn->error;
-    }
-    header("Location: manage_tickets.php");
-    exit();
-}
-
-// Handle ticket deletion
-if (isset($_POST['delete_ticket'])) {
-    $ticket_id = $_POST['ticket_id'];
-    $stmt = $conn->prepare("DELETE FROM tickets WHERE ticket_id = ?");
-    $stmt->bind_param("i", $ticket_id);
-    if ($stmt->execute()) {
-        $_SESSION['success_message'] = "Ticket deleted successfully!";
-    } else {
-        $_SESSION['error_message'] = "Error deleting ticket: " . $conn->error;
-    }
-    header("Location: manage_tickets.php");
-    exit();
-}
-
-// Fetch all schedules for dropdown
-$schedules_sql = "SELECT schedule_id, train_number, departure_station, arrival_station, 
-                         departure_time, arrival_time, price 
-                  FROM schedules 
-                  ORDER BY departure_time ASC";
-$schedules = $conn->query($schedules_sql);
-$schedule_options = [];
-while ($schedule = $schedules->fetch_assoc()) {
-    $schedule_options[$schedule['schedule_id']] = sprintf(
-        "Train %s: %s to %s (%s)",
-        $schedule['train_number'],
-        $schedule['departure_station'],
-        $schedule['arrival_station'],
-        date('d M Y, h:i A', strtotime($schedule['departure_time']))
-    );
-}
-
-// Fetch all tickets with related information
+// Fetch all tickets with user details
 $sql = "SELECT t.*, u.username, s.train_number, s.departure_station, s.arrival_station, 
-               s.departure_time, s.arrival_time, s.price 
+        s.departure_time, s.arrival_time, s.price 
         FROM tickets t 
         JOIN users u ON t.user_id = u.user_id 
         JOIN schedules s ON t.schedule_id = s.schedule_id 
@@ -94,6 +35,7 @@ $tickets = $conn->query($sql);
             padding: 20px;
             background-color: #343a40;
             color: white;
+            width: 250px;
         }
         .content {
             margin-left: 250px;
@@ -102,12 +44,38 @@ $tickets = $conn->query($sql);
         .nav-link {
             color: white;
             margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .nav-link:hover {
             color: #17a2b8;
         }
-        .alert {
-            margin-top: 20px;
+        .nav-link.active {
+            background-color: #0056b3;
+            color: white;
+        }
+        .ticket-status {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .ticket-status.active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .ticket-status.used {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+        .ticket-status.cancelled {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .ticket-status.expired {
+            background-color: #e2e3e5;
+            color: #383d41;
         }
     </style>
 </head>
@@ -130,8 +98,11 @@ $tickets = $conn->query($sql);
                     <a class="nav-link" href="manage_users.php">
                         <i class='bx bx-user'></i> Manage Users
                     </a>
+                    <a class="nav-link" href="scan_qr.php">
+                        <i class='bx bx-qr-scan'></i> Scan QR
+                    </a>
                     <?php if ($_SESSION['staff_role'] === 'admin'): ?>
-                    <a class="nav-link" href="manage_staffs.php">
+                    <a class="nav-link" href="manage_staff.php">
                         <i class='bx bx-group'></i> Manage Staff
                     </a>
                     <?php endif; ?>
@@ -143,27 +114,19 @@ $tickets = $conn->query($sql);
 
             <!-- Main Content -->
             <div class="col-md-10 content">
-                <h2>Manage Tickets</h2>
-                
-                <?php if (isset($_SESSION['success_message'])): ?>
-                    <div class="alert alert-success">
-                        <?php 
-                        echo $_SESSION['success_message']; 
-                        unset($_SESSION['success_message']);
-                        ?>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>Manage Tickets</h2>
+                    <div>
+                        <button class="btn btn-primary me-2" onclick="window.location.href='scan_qr.php'">
+                            <i class='bx bx-qr-scan'></i> Scan QR Code
+                        </button>
+                        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#verifyTicketModal">
+                            <i class='bx bx-check-circle'></i> Verify Ticket
+                        </button>
                     </div>
-                <?php endif; ?>
+                </div>
 
-                <?php if (isset($_SESSION['error_message'])): ?>
-                    <div class="alert alert-danger">
-                        <?php 
-                        echo $_SESSION['error_message']; 
-                        unset($_SESSION['error_message']);
-                        ?>
-                    </div>
-                <?php endif; ?>
-
-                <div class="card mt-4">
+                <div class="card">
                     <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-striped">
@@ -174,10 +137,8 @@ $tickets = $conn->query($sql);
                                         <th>Train</th>
                                         <th>Route</th>
                                         <th>Departure</th>
-                                        <th>Seat</th>
-                                        <th>Amount</th>
                                         <th>Status</th>
-                                        <th>Payment</th>
+                                        <th>Booking Date</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -192,94 +153,58 @@ $tickets = $conn->query($sql);
                                             <?php echo htmlspecialchars($ticket['arrival_station']); ?>
                                         </td>
                                         <td><?php echo date('d M Y, h:i A', strtotime($ticket['departure_time'])); ?></td>
-                                        <td><?php echo htmlspecialchars($ticket['seat_number']); ?></td>
-                                        <td>RM <?php echo number_format($ticket['payment_amount'], 2); ?></td>
-                                        <td><?php echo htmlspecialchars($ticket['status']); ?></td>
-                                        <td><?php echo htmlspecialchars($ticket['payment_status']); ?></td>
                                         <td>
-                                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" 
-                                                    data-bs-target="#editModal<?php echo $ticket['ticket_id']; ?>">
-                                                Edit
+                                            <span class="ticket-status <?php echo $ticket['status']; ?>">
+                                                <?php echo ucfirst($ticket['status']); ?>
+                                            </span>
+                                        </td>
+                                        <td><?php echo date('d M Y, h:i A', strtotime($ticket['booking_date'])); ?></td>
+                                        <td>
+                                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detailsModal<?php echo $ticket['ticket_id']; ?>">
+                                                <i class='bx bx-info-circle'></i>
                                             </button>
-                                            <form action="" method="POST" class="d-inline" 
-                                                  onsubmit="return confirm('Are you sure you want to delete this ticket?');">
-                                                <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
-                                                <button type="submit" name="delete_ticket" class="btn btn-danger btn-sm">Delete</button>
-                                            </form>
+                                            <?php if ($ticket['status'] === 'active'): ?>
+                                            <button class="btn btn-sm btn-success" onclick="verifyTicket(<?php echo $ticket['ticket_id']; ?>)">
+                                                <i class='bx bx-check'></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="cancelTicket(<?php echo $ticket['ticket_id']; ?>)">
+                                                <i class='bx bx-x'></i>
+                                            </button>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
 
-                                    <!-- Edit Modal -->
-                                    <div class="modal fade" id="editModal<?php echo $ticket['ticket_id']; ?>" tabindex="-1">
+                                    <!-- Ticket Details Modal -->
+                                    <div class="modal fade" id="detailsModal<?php echo $ticket['ticket_id']; ?>" tabindex="-1">
                                         <div class="modal-dialog">
                                             <div class="modal-content">
                                                 <div class="modal-header">
-                                                    <h5 class="modal-title">Edit Ticket #<?php echo $ticket['ticket_id']; ?></h5>
+                                                    <h5 class="modal-title">Ticket Details</h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
-                                                <form action="" method="POST">
-                                                    <div class="modal-body">
-                                                        <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
-                                                        
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Schedule</label>
-                                                            <select name="schedule_id" class="form-select" required>
-                                                                <?php foreach ($schedule_options as $id => $text): ?>
-                                                                    <option value="<?php echo $id; ?>" 
-                                                                            <?php echo ($id == $ticket['schedule_id']) ? 'selected' : ''; ?>>
-                                                                        <?php echo htmlspecialchars($text); ?>
-                                                                    </option>
-                                                                <?php endforeach; ?>
-                                                            </select>
-                                                        </div>
-
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Seat Number</label>
-                                                            <input type="text" name="seat_number" class="form-control" 
-                                                                   value="<?php echo htmlspecialchars($ticket['seat_number']); ?>" required>
-                                                        </div>
-
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Status</label>
-                                                            <select name="status" class="form-select" required>
-                                                                <option value="active" <?php echo ($ticket['status'] == 'active') ? 'selected' : ''; ?>>
-                                                                    Active
-                                                                </option>
-                                                                <option value="cancelled" <?php echo ($ticket['status'] == 'cancelled') ? 'selected' : ''; ?>>
-                                                                    Cancelled
-                                                                </option>
-                                                                <option value="completed" <?php echo ($ticket['status'] == 'completed') ? 'selected' : ''; ?>>
-                                                                    Completed
-                                                                </option>
-                                                            </select>
-                                                        </div>
-
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Payment Status</label>
-                                                            <select name="payment_status" class="form-select" required>
-                                                                <option value="paid" <?php echo ($ticket['payment_status'] == 'paid') ? 'selected' : ''; ?>>
-                                                                    Paid
-                                                                </option>
-                                                                <option value="pending" <?php echo ($ticket['payment_status'] == 'pending') ? 'selected' : ''; ?>>
-                                                                    Pending
-                                                                </option>
-                                                                <option value="refunded" <?php echo ($ticket['payment_status'] == 'refunded') ? 'selected' : ''; ?>>
-                                                                    Refunded
-                                                                </option>
-                                                            </select>
-                                                        </div>
-
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Payment Amount (RM)</label>
-                                                            <input type="number" step="0.01" name="payment_amount" class="form-control" 
-                                                                   value="<?php echo $ticket['payment_amount']; ?>" required>
-                                                        </div>
+                                                <div class="modal-body">
+                                                    <div class="mb-3">
+                                                        <h6>Passenger Information</h6>
+                                                        <p><strong>Username:</strong> <?php echo htmlspecialchars($ticket['username']); ?></p>
                                                     </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                        <button type="submit" name="edit_ticket" class="btn btn-primary">Save Changes</button>
+                                                    <div class="mb-3">
+                                                        <h6>Journey Details</h6>
+                                                        <p><strong>Train:</strong> <?php echo htmlspecialchars($ticket['train_number']); ?></p>
+                                                        <p><strong>From:</strong> <?php echo htmlspecialchars($ticket['departure_station']); ?></p>
+                                                        <p><strong>To:</strong> <?php echo htmlspecialchars($ticket['arrival_station']); ?></p>
+                                                        <p><strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['departure_time'])); ?></p>
+                                                        <p><strong>Arrival:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['arrival_time'])); ?></p>
                                                     </div>
-                                                </form>
+                                                    <div class="mb-3">
+                                                        <h6>Ticket Information</h6>
+                                                        <p><strong>Price:</strong> RM <?php echo number_format($ticket['price'], 2); ?></p>
+                                                        <p><strong>Status:</strong> <?php echo ucfirst($ticket['status']); ?></p>
+                                                        <p><strong>Booking Date:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['booking_date'])); ?></p>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -293,6 +218,78 @@ $tickets = $conn->query($sql);
         </div>
     </div>
 
+    <!-- Verify Ticket Modal -->
+    <div class="modal fade" id="verifyTicketModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Verify Ticket</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="ticket_actions.php" method="post">
+                    <div class="modal-body">
+                        <input type="hidden" name="action" value="verify">
+                        <div class="mb-3">
+                            <label>Ticket ID</label>
+                            <input type="text" class="form-control" name="ticket_id" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-success">Verify Ticket</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function verifyTicket(ticketId) {
+            if (confirm('Are you sure you want to verify this ticket?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'ticket_actions.php';
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'verify';
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'ticket_id';
+                idInput.value = ticketId;
+                
+                form.appendChild(actionInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+
+        function cancelTicket(ticketId) {
+            if (confirm('Are you sure you want to cancel this ticket?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'ticket_actions.php';
+                
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'cancel';
+                
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden';
+                idInput.name = 'ticket_id';
+                idInput.value = ticketId;
+                
+                form.appendChild(actionInput);
+                form.appendChild(idInput);
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+    </script>
 </body>
 </html>
