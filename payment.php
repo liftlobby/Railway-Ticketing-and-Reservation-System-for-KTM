@@ -29,6 +29,14 @@ if (!empty($ticket_ids)) {
     $result = $stmt->get_result();
     
     while ($row = $result->fetch_assoc()) {
+        // Parse seat range for display
+        $seat_range = $row['seat_number'];
+        if (strpos($seat_range, '-') !== false) {
+            list($start, $end) = explode('-', $seat_range);
+            $row['seat_display'] = "Seats $start to $end";
+        } else {
+            $row['seat_display'] = "Seat " . $seat_range;
+        }
         $tickets[] = $row;
     }
 }
@@ -40,34 +48,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_method'])) {
         
         $payment_method = $_POST['payment_method'];
         $transaction_id = uniqid('PAY_', true);
-        $individual_price = $total_price / $ticket_quantity; // Calculate this once
         
-        // Insert payment record
+        // Insert single payment record for the ticket
         $payment_sql = "INSERT INTO payments (ticket_id, payment_method, amount, payment_date, status, transaction_id) 
                        VALUES (?, ?, ?, NOW(), 'completed', ?)";
         $payment_stmt = $conn->prepare($payment_sql);
         
-        // Update ticket status and add payment for each ticket
-        foreach ($ticket_ids as $ticket_id) {
-            // Insert payment record
-            $payment_stmt->bind_param("isds", $ticket_id, $payment_method, $individual_price, $transaction_id);
-            if (!$payment_stmt->execute()) {
-                throw new Exception("Failed to process payment.");
-            }
-            
-            // Update ticket status
-            $update_sql = "UPDATE tickets SET status = 'active', payment_status = 'paid' WHERE ticket_id = ?";
-            $update_stmt = $conn->prepare($update_sql);
-            $update_stmt->bind_param("i", $ticket_id);
-            if (!$update_stmt->execute()) {
-                throw new Exception("Failed to update ticket status.");
-            }
+        // Process payment for the ticket
+        $ticket_id = $ticket_ids[0]; // We now only have one ticket
+        $payment_stmt->bind_param("isds", $ticket_id, $payment_method, $total_price, $transaction_id);
+        if (!$payment_stmt->execute()) {
+            throw new Exception("Failed to process payment.");
+        }
+        
+        // Update ticket status
+        $update_sql = "UPDATE tickets SET status = 'active', payment_status = 'paid' WHERE ticket_id = ?";
+        $update_stmt = $conn->prepare($update_sql);
+        $update_stmt->bind_param("i", $ticket_id);
+        if (!$update_stmt->execute()) {
+            throw new Exception("Failed to update ticket status.");
         }
         
         // Log the payment
         $log_sql = "INSERT INTO activity_logs (user_id, action, description, ip_address) 
                     VALUES (?, 'payment', ?, ?)";
-        $description = "Payment completed: " . $payment_method . " - " . $transaction_id;
+        $description = "Payment completed for ticket #$ticket_id: " . $payment_method . " - " . $transaction_id;
         $log_stmt = $conn->prepare($log_sql);
         $ip_address = $_SERVER['REMOTE_ADDR'];
         $log_stmt->bind_param("iss", $user_id, $description, $ip_address);
@@ -203,8 +208,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_method'])) {
                     <p><strong>To:</strong> <?php echo isset($ticket['arrival_station']) ? htmlspecialchars($ticket['arrival_station']) : 'N/A'; ?></p>
                     <p><strong>Departure:</strong> <?php echo isset($ticket['departure_time']) ? date('d M Y, h:i A', strtotime($ticket['departure_time'])) : 'N/A'; ?></p>
                     <p><strong>Arrival:</strong> <?php echo isset($ticket['arrival_time']) ? date('d M Y, h:i A', strtotime($ticket['arrival_time'])) : 'N/A'; ?></p>
-                    <?php if (isset($ticket['seat_number'])): ?>
-                        <p><strong>Seat:</strong> <?php echo htmlspecialchars($ticket['seat_number']); ?></p>
+                    <?php if (isset($ticket['seat_display'])): ?>
+                        <p><strong>Seat:</strong> <?php echo htmlspecialchars($ticket['seat_display']); ?></p>
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>

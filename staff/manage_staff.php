@@ -4,16 +4,22 @@ require_once '../config/database.php';
 require_once '../includes/PasswordPolicy.php';
 require_once '../includes/MessageUtility.php';
 
-// Check if user is logged in and has admin role
-if (!isset($_SESSION['staff_id']) || $_SESSION['staff_role'] !== 'admin') {
+// Check if user is logged in
+if (!isset($_SESSION['staff_id'])) {
     header("Location: login.php");
+    exit();
+}
+
+// Check if user has permission to access this page
+if ($_SESSION['staff_role'] !== 'admin' && $_SESSION['staff_role'] !== 'staff') {
+    header("Location: dashboard.php");
     exit();
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $action = $_POST['action'] ?? '';
     
-    if ($action === 'add') {
+    if ($action === 'add' && $_SESSION['staff_role'] === 'admin') {
         try {
             // Start transaction
             $conn->begin_transaction();
@@ -57,15 +63,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $conn->commit();
             $_SESSION['success'] = "Staff added successfully! Initial password: " . $password;
             
-            // TODO: Send email with credentials
-            // For now, we'll just show the password in the success message
-            
         } catch (Exception $e) {
             $conn->rollback();
             $_SESSION['error'] = $e->getMessage();
         }
     } elseif ($action === 'edit') {
         try {
+            // Check if user has permission to edit
+            if ($_SESSION['staff_role'] !== 'admin' && $_SESSION['staff_id'] != $_POST['staff_id']) {
+                throw new Exception("You don't have permission to edit this staff member.");
+            }
+
             $conn->begin_transaction();
 
             // Check for duplicate username except current staff
@@ -90,13 +98,43 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 throw new Exception("Email address already registered. Please use a different email.");
             }
 
-            $stmt = $conn->prepare("UPDATE staffs SET username = ?, email = ?, role = ? WHERE staff_id = ?");
-            $stmt->bind_param("sssi", 
-                $_POST['username'],
-                $_POST['email'],
-                $_POST['role'],
-                $_POST['staff_id']
-            );
+            // If password is being changed
+            if (!empty($_POST['new_password'])) {
+                // Verify current password
+                $stmt = $conn->prepare("SELECT password FROM staffs WHERE staff_id = ?");
+                $stmt->bind_param("i", $_POST['staff_id']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $staff = $result->fetch_assoc();
+
+                if (!PasswordPolicy::verifyPassword($_POST['current_password'], $staff['password'])) {
+                    throw new Exception("Current password is incorrect.");
+                }
+
+                // Validate new password
+                $password_errors = PasswordPolicy::validatePassword($_POST['new_password']);
+                if (!empty($password_errors)) {
+                    throw new Exception(implode(" ", $password_errors));
+                }
+
+                $hashed_password = PasswordPolicy::hashPassword($_POST['new_password']);
+                
+                $stmt = $conn->prepare("UPDATE staffs SET username = ?, email = ?, password = ? WHERE staff_id = ?");
+                $stmt->bind_param("sssi", 
+                    $_POST['username'],
+                    $_POST['email'],
+                    $hashed_password,
+                    $_POST['staff_id']
+                );
+            } else {
+                $stmt = $conn->prepare("UPDATE staffs SET username = ?, email = ? WHERE staff_id = ?");
+                $stmt->bind_param("ssi", 
+                    $_POST['username'],
+                    $_POST['email'],
+                    $_POST['staff_id']
+                );
+            }
+            
             $stmt->execute();
 
             $conn->commit();
@@ -105,7 +143,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $conn->rollback();
             $_SESSION['error'] = $e->getMessage();
         }
-    } elseif ($action === 'reset_password') {
+    } elseif ($action === 'reset_password' && $_SESSION['staff_role'] === 'admin') {
         try {
             $conn->begin_transaction();
 
@@ -120,14 +158,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $conn->commit();
             $_SESSION['success'] = "Password reset successfully! New password: " . $new_password;
             
-            // TODO: Send email with new password
-            // For now, we'll just show it in the success message
-            
         } catch (Exception $e) {
             $conn->rollback();
             $_SESSION['error'] = $e->getMessage();
         }
-    } elseif ($action === 'toggle_status') {
+    } elseif ($action === 'toggle_status' && $_SESSION['staff_role'] === 'admin') {
         try {
             // Check if trying to suspend own account
             if ($_POST['staff_id'] == $_SESSION['staff_id']) {
@@ -147,8 +182,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
-// Fetch all staff members
-$stmt = $conn->prepare("SELECT staff_id, username, email, role, account_status, created_at, last_login FROM staffs ORDER BY username");
+// Fetch all staff members if admin, or just the current staff if not admin
+if ($_SESSION['staff_role'] === 'admin') {
+    $stmt = $conn->prepare("SELECT staff_id, username, email, role, account_status, created_at, last_login FROM staffs ORDER BY username");
+} else {
+    $stmt = $conn->prepare("SELECT staff_id, username, email, role, account_status, created_at, last_login FROM staffs WHERE staff_id = ? ORDER BY username");
+    $stmt->bind_param("i", $_SESSION['staff_id']);
+}
 $stmt->execute();
 $result = $stmt->get_result();
 $staffs = $result->fetch_all(MYSQLI_ASSOC);
@@ -228,17 +268,17 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
 <body>
     <div class="container-fluid p-0">
         <div class="row g-0">
-            <!-- Include the sidebar -->
             <?php include 'sidebar.php'; ?>
 
-            <!-- Main Content -->
             <div class="main-content">
                 <div class="container">
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2>Manage Staff</h2>
+                        <?php if ($_SESSION['staff_role'] === 'admin'): ?>
                         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStaffModal">
                             <i class='bx bx-user-plus'></i> Add New Staff
                         </button>
+                        <?php endif; ?>
                     </div>
 
                     <?php if (isset($_SESSION['success'])): ?>
@@ -271,6 +311,7 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
                                             <th>Email</th>
                                             <th>Role</th>
                                             <th>Status</th>
+                                            <th>Created At</th>
                                             <th>Last Login</th>
                                             <th>Actions</th>
                                         </tr>
@@ -280,65 +321,31 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
                                         <tr>
                                             <td><?php echo htmlspecialchars($staff['username']); ?></td>
                                             <td><?php echo htmlspecialchars($staff['email']); ?></td>
-                                            <td><span class="badge bg-info"><?php echo ucfirst($staff['role']); ?></span></td>
+                                            <td><?php echo htmlspecialchars($staff['role']); ?></td>
                                             <td>
-                                                <span class="staff-status <?php echo $staff['account_status']; ?>">
+                                                <span class="badge bg-<?php echo $staff['account_status'] === 'active' ? 'success' : 'danger'; ?>">
                                                     <?php echo ucfirst($staff['account_status']); ?>
                                                 </span>
                                             </td>
-                                            <td><?php echo $staff['last_login'] ? date('d M Y, h:i A', strtotime($staff['last_login'])) : 'Never'; ?></td>
-                                            <td class="action-buttons">
-                                                <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#viewStaffModal<?php echo $staff['staff_id']; ?>">
-                                                    <i class='bx bx-info-circle'></i>
-                                                </button>
-                                                <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editStaffModal<?php echo $staff['staff_id']; ?>">
-                                                    <i class='bx bx-edit'></i>
-                                                </button>
-                                                <button class="btn btn-sm btn-secondary" onclick="resetPassword(<?php echo $staff['staff_id']; ?>)">
-                                                    <i class='bx bx-key'></i>
-                                                </button>
-                                                <?php if ($staff['staff_id'] != $_SESSION['staff_id']): ?>
-                                                    <?php if ($staff['account_status'] === 'active'): ?>
-                                                        <button class="btn btn-sm btn-danger" onclick="toggleStatus(<?php echo $staff['staff_id']; ?>, 'active')">
-                                                            <i class='bx bx-block'></i>
-                                                        </button>
-                                                    <?php else: ?>
-                                                        <button class="btn btn-sm btn-success" onclick="toggleStatus(<?php echo $staff['staff_id']; ?>, 'suspended')">
-                                                            <i class='bx bx-check'></i>
-                                                        </button>
+                                            <td><?php echo date('Y-m-d H:i:s', strtotime($staff['created_at'])); ?></td>
+                                            <td><?php echo $staff['last_login'] ? date('Y-m-d H:i:s', strtotime($staff['last_login'])) : 'Never'; ?></td>
+                                            <td>
+                                                <div class="btn-group">
+                                                    <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#editStaffModal<?php echo $staff['staff_id']; ?>">
+                                                        <i class='bx bx-edit'></i>
+                                                    </button>
+                                                    <?php if ($_SESSION['staff_role'] === 'admin' && $staff['staff_id'] != $_SESSION['staff_id']): ?>
+                                                    <button class="btn btn-sm btn-warning" onclick="resetPassword(<?php echo $staff['staff_id']; ?>)">
+                                                        <i class='bx bx-key'></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-<?php echo $staff['account_status'] === 'active' ? 'danger' : 'success'; ?>"
+                                                            onclick="toggleStatus(<?php echo $staff['staff_id']; ?>, '<?php echo $staff['account_status']; ?>')">
+                                                        <i class='bx bx-power-off'></i>
+                                                    </button>
                                                     <?php endif; ?>
-                                                <?php endif; ?>
+                                                </div>
                                             </td>
                                         </tr>
-
-                                        <!-- View Staff Modal -->
-                                        <div class="modal fade" id="viewStaffModal<?php echo $staff['staff_id']; ?>" tabindex="-1">
-                                            <div class="modal-dialog">
-                                                <div class="modal-content">
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">Staff Details</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <div class="mb-3">
-                                                            <h6>Basic Information</h6>
-                                                            <p><strong>Username:</strong> <?php echo htmlspecialchars($staff['username']); ?></p>
-                                                            <p><strong>Email:</strong> <?php echo htmlspecialchars($staff['email']); ?></p>
-                                                            <p><strong>Role:</strong> <?php echo ucfirst($staff['role']); ?></p>
-                                                            <p><strong>Status:</strong> <?php echo ucfirst($staff['account_status']); ?></p>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <h6>Additional Information</h6>
-                                                            <p><strong>Created:</strong> <?php echo date('d M Y, h:i A', strtotime($staff['created_at'])); ?></p>
-                                                            <p><strong>Last Login:</strong> <?php echo $staff['last_login'] ? date('d M Y, h:i A', strtotime($staff['last_login'])) : 'Never'; ?></p>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
 
                                         <!-- Edit Staff Modal -->
                                         <div class="modal fade" id="editStaffModal<?php echo $staff['staff_id']; ?>" tabindex="-1">
@@ -348,24 +355,33 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
                                                         <h5 class="modal-title">Edit Staff</h5>
                                                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                     </div>
-                                                    <form action="manage_staff.php" method="POST">
-                                                        <input type="hidden" name="action" value="edit">
-                                                        <input type="hidden" name="staff_id" value="<?php echo $staff['staff_id']; ?>">
+                                                    <form action="" method="POST">
                                                         <div class="modal-body">
+                                                            <input type="hidden" name="action" value="edit">
+                                                            <input type="hidden" name="staff_id" value="<?php echo $staff['staff_id']; ?>">
+                                                            
                                                             <div class="mb-3">
                                                                 <label class="form-label">Username</label>
                                                                 <input type="text" class="form-control" name="username" value="<?php echo htmlspecialchars($staff['username']); ?>" required>
                                                             </div>
+                                                            
                                                             <div class="mb-3">
                                                                 <label class="form-label">Email</label>
                                                                 <input type="email" class="form-control" name="email" value="<?php echo htmlspecialchars($staff['email']); ?>" required>
                                                             </div>
+
+                                                            <!-- Password change section -->
                                                             <div class="mb-3">
-                                                                <label class="form-label">Role</label>
-                                                                <select class="form-select" name="role" required>
-                                                                    <option value="admin" <?php echo $staff['role'] === 'admin' ? 'selected' : ''; ?>>Admin</option>
-                                                                    <option value="staff" <?php echo $staff['role'] === 'staff' ? 'selected' : ''; ?>>Staff</option>
-                                                                </select>
+                                                                <label class="form-label">Current Password (required for password change)</label>
+                                                                <input type="password" class="form-control" name="current_password">
+                                                            </div>
+
+                                                            <div class="mb-3">
+                                                                <label class="form-label">New Password (leave blank to keep current)</label>
+                                                                <input type="password" class="form-control" name="new_password">
+                                                                <div class="form-text">
+                                                                    Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <div class="modal-footer">
@@ -388,6 +404,7 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
     </div>
 
     <!-- Add Staff Modal -->
+    <?php if ($_SESSION['staff_role'] === 'admin'): ?>
     <div class="modal fade" id="addStaffModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -395,27 +412,26 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
                     <h5 class="modal-title">Add New Staff</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="manage_staff.php" method="POST">
-                    <input type="hidden" name="action" value="add">
+                <form action="" method="POST">
                     <div class="modal-body">
+                        <input type="hidden" name="action" value="add">
+                        
                         <div class="mb-3">
                             <label class="form-label">Username</label>
                             <input type="text" class="form-control" name="username" required>
                         </div>
+                        
                         <div class="mb-3">
                             <label class="form-label">Email</label>
                             <input type="email" class="form-control" name="email" required>
                         </div>
+                        
                         <div class="mb-3">
                             <label class="form-label">Role</label>
                             <select class="form-select" name="role" required>
+                                <option value="staff">Staff</option>
                                 <option value="admin">Admin</option>
-                                <option value="staff" selected>Staff</option>
                             </select>
-                        </div>
-                        <div class="alert alert-info">
-                            <i class='bx bx-info-circle'></i>
-                            A secure password will be generated automatically and displayed after staff creation.
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -426,6 +442,7 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -433,21 +450,11 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
             if (confirm('Are you sure you want to reset this staff member\'s password?')) {
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = 'manage_staff.php';
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'action';
-                actionInput.value = 'reset_password';
-                
-                const staffInput = document.createElement('input');
-                staffInput.type = 'hidden';
-                staffInput.name = 'staff_id';
-                staffInput.value = staffId;
-                
-                form.appendChild(actionInput);
-                form.appendChild(staffInput);
-                document.body.appendChild(form);
+                form.innerHTML = `
+                    <input type="hidden" name="action" value="reset_password">
+                    <input type="hidden" name="staff_id" value="${staffId}">
+                `;
+                document.body.append(form);
                 form.submit();
             }
         }
@@ -456,27 +463,12 @@ $staffs = $result->fetch_all(MYSQLI_ASSOC);
             if (confirm('Are you sure you want to ' + (currentStatus === 'active' ? 'suspend' : 'activate') + ' this staff member?')) {
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = 'manage_staff.php';
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'action';
-                actionInput.value = 'toggle_status';
-                
-                const staffInput = document.createElement('input');
-                staffInput.type = 'hidden';
-                staffInput.name = 'staff_id';
-                staffInput.value = staffId;
-                
-                const statusInput = document.createElement('input');
-                statusInput.type = 'hidden';
-                statusInput.name = 'current_status';
-                statusInput.value = currentStatus;
-                
-                form.appendChild(actionInput);
-                form.appendChild(staffInput);
-                form.appendChild(statusInput);
-                document.body.appendChild(form);
+                form.innerHTML = `
+                    <input type="hidden" name="action" value="toggle_status">
+                    <input type="hidden" name="staff_id" value="${staffId}">
+                    <input type="hidden" name="current_status" value="${currentStatus}">
+                `;
+                document.body.append(form);
                 form.submit();
             }
         }

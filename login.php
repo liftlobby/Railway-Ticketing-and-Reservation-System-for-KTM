@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
-require_once 'includes/PasswordHandler.php';
+require_once 'includes/PasswordPolicy.php';
 require_once 'includes/MessageUtility.php';
 
 // If user is already logged in, redirect to index
@@ -42,10 +42,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
                 
                 // Verify password
-                if (PasswordHandler::verifyPassword($password, $user['password'])) {
+                if (PasswordPolicy::verifyPassword($password, $user['password'])) {
+                    // Check if password has expired
+                    if (PasswordPolicy::isPasswordExpired($user['last_password_change'])) {
+                        $_SESSION['temp_user_id'] = $user['user_id'];
+                        $_SESSION['password_expired'] = true;
+                        header("Location: change_password.php");
+                        exit();
+                    }
+
                     // Check if password needs rehash
-                    if (PasswordHandler::needsRehash($user['password'])) {
-                        $new_hash = PasswordHandler::hashPassword($password);
+                    if (PasswordPolicy::needsRehash($user['password'])) {
+                        $new_hash = PasswordPolicy::hashPassword($password);
                         $update_stmt = $conn->prepare("UPDATE users SET password = ? WHERE user_id = ?");
                         $update_stmt->bind_param("si", $new_hash, $user['user_id']);
                         $update_stmt->execute();
@@ -69,9 +77,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     // Increment failed attempts
                     $failed_attempts = $user['failed_attempts'] + 1;
                     
-                    if (PasswordHandler::shouldLockAccount($failed_attempts)) {
+                    if (PasswordPolicy::shouldLockAccount($failed_attempts)) {
                         // Lock account
-                        $locked_until = PasswordHandler::getLockoutTime();
+                        $locked_until = PasswordPolicy::getLockoutTime();
                         $stmt = $conn->prepare("UPDATE users SET failed_attempts = ?, locked_until = ?, account_status = 'locked' WHERE user_id = ?");
                         $stmt->bind_param("isi", $failed_attempts, $locked_until, $user['user_id']);
                     } else {
@@ -81,12 +89,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                     $stmt->execute();
                     
-                    $remaining_attempts = PasswordHandler::getRemainingAttempts($failed_attempts);
-                    if ($remaining_attempts > 0) {
-                        throw new Exception("Invalid credentials. $remaining_attempts attempts remaining before account lockout.");
-                    } else {
-                        throw new Exception("Account has been locked due to too many failed attempts. Try again after " . PasswordHandler::LOCKOUT_DURATION . " minutes.");
-                    }
+                    throw new Exception(PasswordPolicy::getLoginAttemptMessage($failed_attempts));
                 }
             } else {
                 throw new Exception("Invalid credentials.");

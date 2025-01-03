@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
-require_once 'includes/PasswordUtility.php';
+require_once 'includes/PasswordPolicy.php';
 require_once 'includes/MessageUtility.php';
 
 // If user is already logged in, redirect to index
@@ -53,7 +53,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     // Validate password strength
-    $password_errors = PasswordUtility::validatePasswordStrength($password);
+    $password_errors = PasswordPolicy::validatePassword($password);
     if (!empty($password_errors)) {
         $form_errors['password'] = implode(' ', $password_errors);
     }
@@ -79,7 +79,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
 
             // Hash password
-            $hashed_password = PasswordUtility::hashPassword($password);
+            $hashed_password = PasswordPolicy::hashPassword($password);
 
             // Begin transaction
             $conn->begin_transaction();

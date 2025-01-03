@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../config/database.php';
-require_once '../includes/PasswordHandler.php';
+require_once '../includes/PasswordPolicy.php';
 require_once '../includes/MessageUtility.php';
 
 // Enable error reporting for debugging
@@ -39,29 +39,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     throw new Exception("Account is locked until $unlock_time");
                 }
                 
-                // For debugging - remove in production
-                if ($username === 'admin' && $password === 'Admin@123') {
-                    // Set session variables
-                    $_SESSION['staff_id'] = $staff['staff_id'];
-                    $_SESSION['staff_username'] = $staff['username'];
-                    $_SESSION['staff_role'] = $staff['role'];
-                    
-                    // Update the password hash to use proper hashing
-                    $new_hash = PasswordHandler::hashPassword($password);
-                    $update_stmt = $conn->prepare("UPDATE staffs SET password = ? WHERE username = ?");
-                    $update_stmt->bind_param("ss", $new_hash, $username);
-                    $update_stmt->execute();
-                    
-                    $conn->commit();
-                    header("Location: dashboard.php");
-                    exit();
-                }
-                
                 // Verify password
-                if (PasswordHandler::verifyPassword($password, $staff['password'])) {
+                if (PasswordPolicy::verifyPassword($password, $staff['password'])) {
+                    // Check if password has expired
+                    if (PasswordPolicy::isPasswordExpired($staff['last_password_change'])) {
+                        $_SESSION['temp_staff_id'] = $staff['staff_id'];
+                        $_SESSION['password_expired'] = true;
+                        header("Location: change_password.php");
+                        exit();
+                    }
+
                     // Check if password needs rehash
-                    if (PasswordHandler::needsRehash($staff['password'])) {
-                        $new_hash = PasswordHandler::hashPassword($password);
+                    if (PasswordPolicy::needsRehash($staff['password'])) {
+                        $new_hash = PasswordPolicy::hashPassword($password);
                         $update_stmt = $conn->prepare("UPDATE staffs SET password = ? WHERE staff_id = ?");
                         $update_stmt->bind_param("si", $new_hash, $staff['staff_id']);
                         $update_stmt->execute();
@@ -84,9 +74,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     // Increment failed attempts
                     $failed_attempts = $staff['failed_attempts'] + 1;
                     
-                    if (PasswordHandler::shouldLockAccount($failed_attempts)) {
+                    if (PasswordPolicy::shouldLockAccount($failed_attempts)) {
                         // Lock account
-                        $locked_until = PasswordHandler::getLockoutTime();
+                        $locked_until = PasswordPolicy::getLockoutTime();
                         $stmt = $conn->prepare("UPDATE staffs SET failed_attempts = ?, locked_until = ?, account_status = 'locked' WHERE staff_id = ?");
                         $stmt->bind_param("isi", $failed_attempts, $locked_until, $staff['staff_id']);
                     } else {
@@ -96,12 +86,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     }
                     $stmt->execute();
                     
-                    $remaining_attempts = PasswordHandler::getRemainingAttempts($failed_attempts);
-                    if ($remaining_attempts > 0) {
-                        throw new Exception("Invalid credentials. $remaining_attempts attempts remaining before account lockout.");
-                    } else {
-                        throw new Exception("Account has been locked due to too many failed attempts. Try again after " . PasswordHandler::LOCKOUT_DURATION . " minutes.");
-                    }
+                    throw new Exception(PasswordPolicy::getLoginAttemptMessage($failed_attempts));
                 }
             } else {
                 throw new Exception("Invalid credentials.");

@@ -292,18 +292,11 @@ while ($ticket = $result->fetch_assoc()) {
                                 <p><strong>Seat:</strong> <?php echo htmlspecialchars($ticket['seat_number']); ?></p>
                                 <p><strong>Price:</strong> RM <?php echo number_format($ticket['price'], 2); ?></p>
                                 <p><strong>Booking Date:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['booking_date'])); ?></p>
-                            </div>
-                            <div class="ticket-qr">
-                                <img src="generate_qr.php?ticket_id=<?php echo $ticket['ticket_id']; ?>" 
-                                     alt="Ticket QR Code" 
-                                     class="qr-code"
-                                     onclick="showQRModal(<?php echo $ticket['ticket_id']; ?>)">
-                                <button class="btn btn-view-qr" onclick="showQRModal(<?php echo $ticket['ticket_id']; ?>)">
-                                    View QR Code
-                                </button>
-                                <a href="download_ticket.php?ticket_id=<?php echo $ticket['ticket_id']; ?>" class="btn btn-download">
-                                    Download Ticket
-                                </a>
+                                <?php if ($ticket['status'] === 'cancelled'): ?>
+                                    <p><strong>Status:</strong> <span class="text-danger">Cancelled</span></p>
+                                <?php elseif ($ticket['ticket_status'] === 'departed'): ?>
+                                    <p><strong>Status:</strong> <span class="text-secondary">Departed</span></p>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>

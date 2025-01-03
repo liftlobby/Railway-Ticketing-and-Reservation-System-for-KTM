@@ -31,7 +31,6 @@ CREATE TABLE `users` (
   `failed_attempts` int DEFAULT 0,
   `locked_until` timestamp NULL,
   `account_status` enum('active','locked','suspended') DEFAULT 'active',
-  `preferences` JSON DEFAULT NULL,
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `username` (`username`),
   UNIQUE KEY `email` (`email`)
@@ -51,6 +50,7 @@ CREATE TABLE `staffs` (
   `role` enum('admin','staff') NOT NULL DEFAULT 'staff',
   `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
   `last_login` timestamp NULL,
+  `last_password_change` timestamp NULL,
   `failed_attempts` int DEFAULT 0,
   `locked_until` timestamp NULL,
   `account_status` enum('active','locked','suspended') DEFAULT 'active',
@@ -58,20 +58,6 @@ CREATE TABLE `staffs` (
   UNIQUE KEY `username` (`username`),
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Default admin account
--- Username: admin
--- Password: Admin@123
---
-INSERT INTO `staffs` (`username`, `email`, `password`, `role`, `account_status`) 
-VALUES (
-    'admin',
-    'admin@ktm.com',
-    '$argon2id$v=19$m=65536,t=4,p=3$cm1qbE9Hc255ZnYyanYyOQ$VbsaE9ziEQkBDmmGJY/7F6ZZXbdjl9enM/jx18cH/Hw',
-    'admin',
-    'active'
-);
 
 -- --------------------------------------------------------
 
@@ -110,6 +96,7 @@ CREATE TABLE `tickets` (
   `booking_date` timestamp DEFAULT CURRENT_TIMESTAMP,
   `passenger_name` varchar(100) DEFAULT NULL,
   `seat_number` varchar(10) NOT NULL,
+  `num_seats` int(11) DEFAULT 1,
   `special_requests` text DEFAULT NULL,
   `status` enum('active','cancelled','completed') NOT NULL DEFAULT 'active',
   `qr_code` varchar(255) NOT NULL,
@@ -125,8 +112,11 @@ CREATE TABLE `tickets` (
 
 -- --------------------------------------------------------
 
--- Create payments table
-CREATE TABLE IF NOT EXISTS `payments` (
+--
+-- Table structure for table `payments`
+--
+
+CREATE TABLE `payments` (
     `payment_id` INT PRIMARY KEY AUTO_INCREMENT,
     `ticket_id` INT NOT NULL,
     `payment_method` VARCHAR(50) NOT NULL,
@@ -141,8 +131,13 @@ CREATE TABLE IF NOT EXISTS `payments` (
     INDEX `idx_payment_date` (`payment_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Create refunds table
-CREATE TABLE IF NOT EXISTS `refunds` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `refunds`
+--
+
+CREATE TABLE `refunds` (
     `refund_id` INT PRIMARY KEY AUTO_INCREMENT,
     `ticket_id` INT NOT NULL,
     `amount` DECIMAL(10,2) NOT NULL,
@@ -159,8 +154,13 @@ CREATE TABLE IF NOT EXISTS `refunds` (
     INDEX `idx_refund_date` (`refund_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Create auth_tokens table for QR code authentication
-CREATE TABLE IF NOT EXISTS `auth_tokens` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `auth_tokens`
+--
+
+CREATE TABLE `auth_tokens` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
     `token` VARCHAR(64) NOT NULL,
     `token_hash` VARCHAR(64) NOT NULL,
@@ -181,8 +181,13 @@ CREATE TABLE IF NOT EXISTS `auth_tokens` (
     INDEX `idx_expiry` (`expiry_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Create ticket_verifications table for tracking QR code scans
-CREATE TABLE IF NOT EXISTS `ticket_verifications` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `ticket_verifications`
+--
+
+CREATE TABLE `ticket_verifications` (
     `verification_id` INT PRIMARY KEY AUTO_INCREMENT,
     `ticket_id` INT NOT NULL,
     `staff_id` INT NOT NULL,
@@ -194,24 +199,45 @@ CREATE TABLE IF NOT EXISTS `ticket_verifications` (
     FOREIGN KEY (`staff_id`) REFERENCES `staffs`(`staff_id`),
     INDEX `idx_verification_time` (`verification_time`),
     INDEX `idx_ticket_verification` (`ticket_id`, `verification_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- Create verification_logs table
-CREATE TABLE IF NOT EXISTS `verification_logs` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `password_history`
+--
+
+CREATE TABLE `password_history` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `ticket_id` INT NOT NULL,
-    `staff_id` INT NOT NULL,
-    `verification_time` DATETIME NOT NULL,
-    `status` VARCHAR(20) NOT NULL DEFAULT 'onboard',
+    `user_id` INT NOT NULL,
+    `password_hash` VARCHAR(255) NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (`ticket_id`) REFERENCES `tickets`(`ticket_id`),
-    FOREIGN KEY (`staff_id`) REFERENCES `staffs`(`staff_id`),
-    INDEX `idx_verification_time` (`verification_time`),
-    INDEX `idx_ticket_staff` (`ticket_id`, `staff_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE,
+    INDEX `idx_user_history` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- Create login_attempts table to track failed login attempts
-CREATE TABLE IF NOT EXISTS `login_attempts` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `staff_password_history`
+--
+
+CREATE TABLE `staff_password_history` (
+    `id` INT PRIMARY KEY AUTO_INCREMENT,
+    `staff_id` INT NOT NULL,
+    `password_hash` VARCHAR(255) NOT NULL,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (`staff_id`) REFERENCES `staffs`(`staff_id`) ON DELETE CASCADE,
+    INDEX `idx_staff_history` (`staff_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `login_attempts`
+--
+
+CREATE TABLE `login_attempts` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
     `username` VARCHAR(50) NOT NULL,
     `ip_address` VARCHAR(45) NOT NULL,
@@ -221,8 +247,13 @@ CREATE TABLE IF NOT EXISTS `login_attempts` (
     INDEX `idx_attempt_time` (`attempt_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Create activity_logs table for audit trail
-CREATE TABLE IF NOT EXISTS `activity_logs` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `activity_logs`
+--
+
+CREATE TABLE `activity_logs` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
     `user_id` INT NULL,
     `staff_id` INT NULL,
@@ -237,24 +268,27 @@ CREATE TABLE IF NOT EXISTS `activity_logs` (
     INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Create reports table
-CREATE TABLE IF NOT EXISTS `reports` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `reports`
+--
+
+CREATE TABLE `reports` (
     `report_id` INT PRIMARY KEY AUTO_INCREMENT,
     `user_id` INT NULL,  -- NULL if submitted by non-logged in user
     `name` VARCHAR(100) NOT NULL,
     `email` VARCHAR(100) NOT NULL,
-    `problem_description` TEXT NOT NULL,
-    `ticket_number` VARCHAR(50) NULL,
-    `status` ENUM('pending', 'in_progress', 'resolved', 'closed') NOT NULL DEFAULT 'pending',
-    `priority` ENUM('low', 'medium', 'high', 'urgent') NOT NULL DEFAULT 'medium',
-    `assigned_to` INT NULL,  -- staff_id of assigned staff member
-    `feedback` TEXT NULL,  -- Staff feedback/resolution details
+    `subject` VARCHAR(200) NOT NULL,
+    `message` TEXT NOT NULL,
+    `status` ENUM('new', 'responded') DEFAULT 'new',
+    `staff_id` INT NULL,
+    `response` TEXT NULL,
+    `response_date` TIMESTAMP NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`assigned_to`) REFERENCES `staffs`(`staff_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`staff_id`) REFERENCES `staffs`(`staff_id`) ON DELETE SET NULL,
     INDEX `idx_status` (`status`),
-    INDEX `idx_priority` (`priority`),
     INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

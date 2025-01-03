@@ -1,15 +1,134 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../includes/MessageUtility.php';
 
-// Check if staff is logged in
+// Check if staff is logged in and is admin
 if (!isset($_SESSION['staff_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// Fetch all users
-$sql = "SELECT * FROM users ORDER BY created_at DESC";
+// Check if the logged-in staff is admin
+$staff_id = $_SESSION['staff_id'];
+$admin_check = $conn->prepare("SELECT role FROM staffs WHERE staff_id = ?");
+$admin_check->bind_param("i", $staff_id);
+$admin_check->execute();
+$is_admin = $admin_check->get_result()->fetch_assoc()['role'] === 'admin';
+
+if (!$is_admin) {
+    header("Location: dashboard.php");
+    exit();
+}
+
+// Handle user actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action'])) {
+        $user_id = $_POST['user_id'];
+        
+        if ($_POST['action'] === 'update') {
+            // Update user information
+            $username = $_POST['username'];
+            $email = $_POST['email'];
+            $phone = $_POST['phone'];
+            
+            $stmt = $conn->prepare("UPDATE users SET username = ?, email = ?, no_phone = ? WHERE user_id = ?");
+            $stmt->bind_param("sssi", $username, $email, $phone, $user_id);
+            
+            if ($stmt->execute()) {
+                MessageUtility::setSuccessMessage("User information updated successfully!");
+            } else {
+                MessageUtility::setErrorMessage("Failed to update user information.");
+            }
+        } elseif ($_POST['action'] === 'suspend') {
+            // Suspend user account
+            $stmt = $conn->prepare("UPDATE users SET account_status = 'suspended' WHERE user_id = ?");
+            $stmt->bind_param("i", $user_id);
+            
+            if ($stmt->execute()) {
+                MessageUtility::setSuccessMessage("User account suspended successfully!");
+            } else {
+                MessageUtility::setErrorMessage("Failed to suspend user account.");
+            }
+        } elseif ($_POST['action'] === 'activate') {
+            // Activate user account
+            $stmt = $conn->prepare("UPDATE users SET account_status = 'active', failed_attempts = 0, locked_until = NULL WHERE user_id = ?");
+            $stmt->bind_param("i", $user_id);
+            
+            if ($stmt->execute()) {
+                MessageUtility::setSuccessMessage("User account activated successfully!");
+            } else {
+                MessageUtility::setErrorMessage("Failed to activate user account.");
+            }
+        } elseif ($_POST['action'] === 'delete') {
+            try {
+                // Start transaction
+                $conn->begin_transaction();
+
+                // First, check if user has any active tickets
+                $check_tickets = $conn->prepare("SELECT COUNT(*) as count FROM tickets WHERE user_id = ? AND status = 'active'");
+                $check_tickets->bind_param("i", $user_id);
+                $check_tickets->execute();
+                $active_tickets = $check_tickets->get_result()->fetch_assoc()['count'];
+
+                if ($active_tickets > 0) {
+                    throw new Exception("Cannot delete user with active tickets.");
+                }
+
+                // Delete user's tickets first (to maintain referential integrity)
+                $delete_tickets = $conn->prepare("DELETE FROM tickets WHERE user_id = ?");
+                $delete_tickets->bind_param("i", $user_id);
+                if (!$delete_tickets->execute()) {
+                    throw new Exception("Failed to delete user's tickets.");
+                }
+
+                // Delete user's reports
+                $delete_reports = $conn->prepare("DELETE FROM reports WHERE user_id = ?");
+                $delete_reports->bind_param("i", $user_id);
+                if (!$delete_reports->execute()) {
+                    throw new Exception("Failed to delete user's reports.");
+                }
+
+                // Finally, delete the user
+                $delete_user = $conn->prepare("DELETE FROM users WHERE user_id = ?");
+                $delete_user->bind_param("i", $user_id);
+                if (!$delete_user->execute()) {
+                    throw new Exception("Failed to delete user.");
+                }
+
+                $conn->commit();
+                MessageUtility::setSuccessMessage("User and all associated data deleted successfully!");
+            } catch (Exception $e) {
+                $conn->rollback();
+                MessageUtility::setErrorMessage($e->getMessage());
+            }
+        } elseif ($_POST['action'] === 'add') {
+            // Add new user
+            $username = $_POST['username'];
+            $email = $_POST['email'];
+            $phone = $_POST['phone'];
+            $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+            
+            $stmt = $conn->prepare("INSERT INTO users (username, email, no_phone, password) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("ssss", $username, $email, $phone, $password);
+            
+            if ($stmt->execute()) {
+                MessageUtility::setSuccessMessage("New user added successfully!");
+            } else {
+                MessageUtility::setErrorMessage("Failed to add new user.");
+            }
+        }
+    }
+}
+
+// Fetch all users with their ticket counts
+$sql = "SELECT u.*, 
+        COUNT(DISTINCT t.ticket_id) as total_tickets,
+        SUM(CASE WHEN t.status = 'active' THEN 1 ELSE 0 END) as active_tickets
+        FROM users u 
+        LEFT JOIN tickets t ON u.user_id = t.user_id 
+        GROUP BY u.user_id 
+        ORDER BY u.created_at DESC";
 $users = $conn->query($sql);
 ?>
 
@@ -60,64 +179,75 @@ $users = $conn->query($sql);
             background-color: #d4edda;
             color: #155724;
         }
-        .user-status.inactive {
+        .user-status.locked {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .user-status.suspended {
             background-color: #f8d7da;
             color: #721c24;
         }
-        .user-status.suspended {
-            background-color: #fff3cd;
-            color: #856404;
+        .dashboard-header {
+            margin-bottom: 30px;
+        }
+        .dashboard-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .card {
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            border: none;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .btn-action {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            border-radius: 0.2rem;
+        }
+        .modal-content {
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .modal-header {
+            background-color: #f8f9fa;
+            border-radius: 8px 8px 0 0;
+        }
+        .modal-body h6 {
+            color: #0056b3;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-2 sidebar">
-                <h3 class="mb-4">Staff Dashboard</h3>
-                <nav class="nav flex-column">
-                    <a class="nav-link" href="dashboard.php">
-                        <i class='bx bxs-dashboard'></i> Dashboard
-                    </a>
-                    <a class="nav-link" href="manage_schedules.php">
-                        <i class='bx bx-time-five'></i> Manage Schedules
-                    </a>
-                    <a class="nav-link" href="manage_tickets.php">
-                        <i class='bx bx-ticket'></i> Manage Tickets
-                    </a>
-                    <a class="nav-link active" href="manage_users.php">
-                        <i class='bx bx-user'></i> Manage Users
-                    </a>
-                    <a class="nav-link" href="scan_qr.php">
-                        <i class='bx bx-qr-scan'></i> Scan QR
-                    </a>
-                    <?php if ($_SESSION['staff_role'] === 'admin'): ?>
-                    <a class="nav-link" href="manage_staff.php">
-                        <i class='bx bx-group'></i> Manage Staff
-                    </a>
-                    <?php endif; ?>
-                    <a class="nav-link" href="logout.php">
-                        <i class='bx bx-log-out'></i> Logout
-                    </a>
-                </nav>
-            </div>
+            <?php include 'sidebar.php'; ?>
 
             <!-- Main Content -->
-            <div class="col-md-10 content">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="col content">
+                <div class="dashboard-header">
                     <h2>Manage Users</h2>
-                    <div>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                            <i class='bx bx-user-plus'></i> Add New User
-                        </button>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <p class="text-muted mb-0">View and manage user accounts</p>
+                        <div>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                                <i class='bx bx-user-plus'></i> Add New User
+                            </button>
+                        </div>
                     </div>
                 </div>
+
+                <?php MessageUtility::displayMessages(); ?>
 
                 <div class="card">
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table class="table table-striped">
+                            <table class="table table-hover">
                                 <thead>
                                     <tr>
                                         <th>User ID</th>
@@ -125,6 +255,7 @@ $users = $conn->query($sql);
                                         <th>Email</th>
                                         <th>Phone</th>
                                         <th>Status</th>
+                                        <th>Tickets</th>
                                         <th>Registration Date</th>
                                         <th>Actions</th>
                                     </tr>
@@ -141,23 +272,44 @@ $users = $conn->query($sql);
                                                 <?php echo ucfirst($user['account_status']); ?>
                                             </span>
                                         </td>
+                                        <td>
+                                            <?php echo $user['active_tickets']; ?> active / <?php echo $user['total_tickets']; ?> total
+                                        </td>
                                         <td><?php echo date('d M Y, h:i A', strtotime($user['created_at'])); ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detailsModal<?php echo $user['user_id']; ?>">
-                                                <i class='bx bx-info-circle'></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $user['user_id']; ?>">
-                                                <i class='bx bx-edit'></i>
-                                            </button>
-                                            <?php if ($user['account_status'] === 'active'): ?>
-                                            <button class="btn btn-sm btn-danger" onclick="suspendUser(<?php echo $user['user_id']; ?>)">
-                                                <i class='bx bx-block'></i>
-                                            </button>
-                                            <?php else: ?>
-                                            <button class="btn btn-sm btn-success" onclick="activateUser(<?php echo $user['user_id']; ?>)">
-                                                <i class='bx bx-check'></i>
-                                            </button>
-                                            <?php endif; ?>
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#detailsModal<?php echo $user['user_id']; ?>">
+                                                    <i class='bx bx-info-circle'></i>
+                                                </button>
+                                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $user['user_id']; ?>">
+                                                    <i class='bx bx-edit'></i>
+                                                </button>
+                                                <?php if ($user['account_status'] === 'active'): ?>
+                                                <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to suspend this user?');">
+                                                    <input type="hidden" name="user_id" value="<?php echo $user['user_id']; ?>">
+                                                    <input type="hidden" name="action" value="suspend">
+                                                    <button type="submit" class="btn btn-danger btn-sm">
+                                                        <i class='bx bx-block'></i>
+                                                    </button>
+                                                </form>
+                                                <?php else: ?>
+                                                <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to activate this user?');">
+                                                    <input type="hidden" name="user_id" value="<?php echo $user['user_id']; ?>">
+                                                    <input type="hidden" name="action" value="activate">
+                                                    <button type="submit" class="btn btn-success btn-sm">
+                                                        <i class='bx bx-check'></i>
+                                                    </button>
+                                                </form>
+                                                <?php endif; ?>
+                                                <!-- Delete User Button -->
+                                                <form method="POST" style="display: inline;" onsubmit="return confirm('WARNING: This will permanently delete the user and all their data. This action cannot be undone. Are you sure you want to proceed?');">
+                                                    <input type="hidden" name="user_id" value="<?php echo $user['user_id']; ?>">
+                                                    <input type="hidden" name="action" value="delete">
+                                                    <button type="submit" class="btn btn-danger btn-sm" <?php echo $user['account_status'] === 'active' ? 'disabled title="Cannot delete user with active account"' : ''; ?>>
+                                                        <i class='bx bx-trash'></i>
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
 
@@ -166,25 +318,41 @@ $users = $conn->query($sql);
                                         <div class="modal-dialog">
                                             <div class="modal-content">
                                                 <div class="modal-header">
-                                                    <h5 class="modal-title">User Details</h5>
+                                                    <h5 class="modal-title">User Details #<?php echo $user['user_id']; ?></h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <div class="modal-body">
-                                                    <div class="mb-3">
+                                                    <div class="mb-4">
                                                         <h6>Basic Information</h6>
-                                                        <p><strong>Username:</strong> <?php echo htmlspecialchars($user['username']); ?></p>
-                                                        <p><strong>Email:</strong> <?php echo htmlspecialchars($user['email']); ?></p>
-                                                        <p><strong>Phone:</strong> <?php echo htmlspecialchars($user['no_phone']); ?></p>
-                                                        <p><strong>Status:</strong> <?php echo ucfirst($user['account_status']); ?></p>
+                                                        <p class="mb-1"><strong>Username:</strong> <?php echo htmlspecialchars($user['username']); ?></p>
+                                                        <p class="mb-1"><strong>Email:</strong> <?php echo htmlspecialchars($user['email']); ?></p>
+                                                        <p class="mb-0"><strong>Phone:</strong> <?php echo htmlspecialchars($user['no_phone']); ?></p>
                                                     </div>
-                                                    <div class="mb-3">
-                                                        <h6>Additional Information</h6>
-                                                        <p><strong>Registration Date:</strong> <?php echo date('d M Y, h:i A', strtotime($user['created_at'])); ?></p>
-                                                        <p><strong>Last Login:</strong> <?php echo $user['last_login'] ? date('d M Y, h:i A', strtotime($user['last_login'])) : 'Never'; ?></p>
+                                                    <div class="mb-4">
+                                                        <h6>Account Status</h6>
+                                                        <p class="mb-1"><strong>Status:</strong> <?php echo ucfirst($user['account_status']); ?></p>
+                                                        <p class="mb-1"><strong>Failed Attempts:</strong> <?php echo $user['failed_attempts']; ?></p>
+                                                        <?php if ($user['locked_until']): ?>
+                                                        <p class="mb-0"><strong>Locked Until:</strong> <?php echo date('d M Y, h:i A', strtotime($user['locked_until'])); ?></p>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="mb-4">
+                                                        <h6>Activity Information</h6>
+                                                        <p class="mb-1"><strong>Registration Date:</strong> <?php echo date('d M Y, h:i A', strtotime($user['created_at'])); ?></p>
+                                                        <p class="mb-1"><strong>Last Login:</strong> <?php echo $user['last_login'] ? date('d M Y, h:i A', strtotime($user['last_login'])) : 'Never'; ?></p>
+                                                        <p class="mb-1"><strong>Last Password Change:</strong> <?php echo $user['last_password_change'] ? date('d M Y, h:i A', strtotime($user['last_password_change'])) : 'Never'; ?></p>
+                                                        <p class="mb-0"><strong>Active Tickets:</strong> <?php echo $user['active_tickets']; ?> (Total: <?php echo $user['total_tickets']; ?>)</p>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    <?php if ($user['account_status'] !== 'active'): ?>
+                                                    <form method="POST" style="display: inline;">
+                                                        <input type="hidden" name="user_id" value="<?php echo $user['user_id']; ?>">
+                                                        <input type="hidden" name="action" value="activate">
+                                                        <button type="submit" class="btn btn-success">Activate Account</button>
+                                                    </form>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -195,47 +363,34 @@ $users = $conn->query($sql);
                                         <div class="modal-dialog">
                                             <div class="modal-content">
                                                 <div class="modal-header">
-                                                    <h5 class="modal-title">Edit User</h5>
+                                                    <h5 class="modal-title">Edit User #<?php echo $user['user_id']; ?></h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
-                                                <form action="update_user.php" method="POST">
-                                                    <div class="modal-body">
+                                                <div class="modal-body">
+                                                    <form method="POST">
+                                                        <input type="hidden" name="action" value="update">
                                                         <input type="hidden" name="user_id" value="<?php echo $user['user_id']; ?>">
                                                         <div class="mb-3">
-                                                            <label class="form-label">Username</label>
-                                                            <input type="text" class="form-control" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
+                                                            <label for="username<?php echo $user['user_id']; ?>" class="form-label">Username</label>
+                                                            <input type="text" class="form-control" id="username<?php echo $user['user_id']; ?>" 
+                                                                   name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
                                                         </div>
                                                         <div class="mb-3">
-                                                            <label class="form-label">Email</label>
-                                                            <input type="email" class="form-control" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+                                                            <label for="email<?php echo $user['user_id']; ?>" class="form-label">Email</label>
+                                                            <input type="email" class="form-control" id="email<?php echo $user['user_id']; ?>" 
+                                                                   name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
                                                         </div>
                                                         <div class="mb-3">
-                                                            <label class="form-label">Phone</label>
-                                                            <input type="text" class="form-control" name="phone" value="<?php echo htmlspecialchars($user['no_phone']); ?>" required>
+                                                            <label for="phone<?php echo $user['user_id']; ?>" class="form-label">Phone</label>
+                                                            <input type="text" class="form-control" id="phone<?php echo $user['user_id']; ?>" 
+                                                                   name="phone" value="<?php echo htmlspecialchars($user['no_phone']); ?>" required>
                                                         </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">New Password (leave blank to keep current)</label>
-                                                            <input type="password" class="form-control" name="new_password" minlength="8">
-                                                            <small class="text-muted">Minimum 8 characters</small>
+                                                        <div class="text-end">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-primary">Update User</button>
                                                         </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Confirm New Password</label>
-                                                            <input type="password" class="form-control" name="confirm_password" minlength="8">
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Account Status</label>
-                                                            <select class="form-select" name="account_status" required>
-                                                                <option value="active" <?php echo $user['account_status'] === 'active' ? 'selected' : ''; ?>>Active</option>
-                                                                <option value="inactive" <?php echo $user['account_status'] === 'inactive' ? 'selected' : ''; ?>>Inactive</option>
-                                                                <option value="suspended" <?php echo $user['account_status'] === 'suspended' ? 'selected' : ''; ?>>Suspended</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-primary">Save Changes</button>
-                                                    </div>
-                                                </form>
+                                                    </form>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -257,82 +412,35 @@ $users = $conn->query($sql);
                     <h5 class="modal-title">Add New User</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="user_actions.php" method="post">
-                    <input type="hidden" name="action" value="add">
-                    <div class="modal-body">
+                <div class="modal-body">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add">
                         <div class="mb-3">
-                            <label>Username</label>
-                            <input type="text" class="form-control" name="username" required>
+                            <label for="newUsername" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="newUsername" name="username" required>
                         </div>
                         <div class="mb-3">
-                            <label>Email</label>
-                            <input type="email" class="form-control" name="email" required>
+                            <label for="newEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="newEmail" name="email" required>
                         </div>
                         <div class="mb-3">
-                            <label>Phone</label>
-                            <input type="text" class="form-control" name="no_phone" required>
+                            <label for="newPhone" class="form-label">Phone</label>
+                            <input type="text" class="form-control" id="newPhone" name="phone" required>
                         </div>
                         <div class="mb-3">
-                            <label>Password</label>
-                            <input type="password" class="form-control" name="password" required>
+                            <label for="newPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="newPassword" name="password" required>
                         </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-primary">Add User</button>
-                    </div>
-                </form>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Add User</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function suspendUser(userId) {
-            if (confirm('Are you sure you want to suspend this user?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'user_actions.php';
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'action';
-                actionInput.value = 'suspend';
-                
-                const idInput = document.createElement('input');
-                idInput.type = 'hidden';
-                idInput.name = 'user_id';
-                idInput.value = userId;
-                
-                form.appendChild(actionInput);
-                form.appendChild(idInput);
-                document.body.appendChild(form);
-                form.submit();
-            }
-        }
-
-        function activateUser(userId) {
-            if (confirm('Are you sure you want to activate this user?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'user_actions.php';
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'action';
-                actionInput.value = 'activate';
-                
-                const idInput = document.createElement('input');
-                idInput.type = 'hidden';
-                idInput.name = 'user_id';
-                idInput.value = userId;
-                
-                form.appendChild(actionInput);
-                form.appendChild(idInput);
-                document.body.appendChild(form);
-                form.submit();
-            }
-        }
-    </script>
 </body>
 </html>

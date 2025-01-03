@@ -302,15 +302,20 @@ $late_tickets_result = $late_tickets_stmt->get_result();
             width: 100%;
             height: 100%;
             background-color: rgba(0,0,0,0.5);
+            overflow-y: auto;
         }
 
         .modal-content {
             background-color: white;
-            margin: 15% auto;
+            margin: 5% auto;
             padding: 20px;
             border-radius: 8px;
-            width: 400px;
+            width: 90%;
+            max-width: 500px;
             text-align: center;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
         }
 
         .btn-group {
@@ -318,13 +323,22 @@ $late_tickets_result = $late_tickets_stmt->get_result();
             display: flex;
             justify-content: center;
             gap: 10px;
+            position: sticky;
+            bottom: 0;
+            background: white;
+            padding: 10px 0;
         }
 
         .close {
+            position: sticky;
+            top: 0;
             float: right;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
+            background: white;
+            padding: 0 5px;
+            z-index: 1;
         }
 
         .close:hover {

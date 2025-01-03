@@ -25,13 +25,18 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <a class="nav-link <?php echo $current_page === 'scan_qr.php' ? 'active' : ''; ?>" href="scan_qr.php">
             <i class='bx bx-qr-scan'></i> Scan QR
         </a>
+        <a class="nav-link <?php echo $current_page === 'manage_reports.php' ? 'active' : ''; ?>" href="manage_reports.php">
+            <i class='bx bx-message-square-dots'></i> Manage Reports
+        </a>
         <?php if (isset($_SESSION['staff_role']) && $_SESSION['staff_role'] === 'admin'): ?>
         <a class="nav-link <?php echo $current_page === 'manage_staff.php' ? 'active' : ''; ?>" href="manage_staff.php">
             <i class='bx bx-group'></i> Manage Staff
         </a>
         <?php endif; ?>
-        <a class="nav-link" href="logout.php">
-            <i class='bx bx-log-out'></i> Logout
-        </a>
+        <div class="mt-auto">
+            <a class="nav-link text-danger" href="logout.php">
+                <i class='bx bx-log-out'></i> Logout
+            </a>
+        </div>
     </nav>
 </div>
