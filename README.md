@@ -62,11 +62,14 @@ A comprehensive railway ticket booking and management system for KTM (Keretapi T
    - Clone/copy the project to `htdocs` directory
    - Ensure proper file permissions
    - Configure base URL in configuration files
+   - Remember to run admin_hash.php in staff directory (Code: ../staff/> php admin_hash.php)
+     - To generate admin account (Username: admin, Password: Admin@123)
+    
 
 ## Usage
 
 ### Passenger Portal
-1. Access the system through `http://localhost/KTM/`
+1. Access the system through `http://localhost/<your_directory_name>/`
 2. Register a new account or login
 3. Search for available trains
 4. Select seats and make booking
@@ -81,11 +84,13 @@ A comprehensive railway ticket booking and management system for KTM (Keretapi T
 
 ## Security Features
 - Session management
-- Password hashing
+- Password encryption with Argon2id
+- Password hashing with Argon2id, salting (Unique Salt) and peppering (KTM_SECURE_2024)
 - Input validation
 - SQL injection prevention
 - XSS protection
 - CSRF protection
+- QR code authentication with PHP QR Code and special tokens generated with SHA-256
 
 ## Error Handling
 - Comprehensive error logging
@@ -93,59 +98,5 @@ A comprehensive railway ticket booking and management system for KTM (Keretapi T
 - Transaction rollback for failed operations
 - Proper exception handling
 
-## File Structure
-```
-KTM/
-├── config/
-│   └── database.php
-├── includes/
-│   └── MessageUtility.php
-├── staff/
-│   ├── scan_qr.php
-│   ├── verify_ticket.php
-│   └── ...
-├── assets/
-│   ├── css/
-│   ├── js/
-│   └── images/
-├── process_booking.php
-├── generate_qr.php
-└── README.md
-```
-
-## Troubleshooting
-
-### QR Scanner Issues
-1. Ensure camera permissions are granted
-2. Try switching cameras if available
-3. Check browser console for error messages
-4. Ensure proper lighting for QR code scanning
-5. Use manual ticket ID entry as backup
-
-### Common Issues
-- Database connection errors: Check database configuration
-- Session issues: Clear browser cache and cookies
-- Payment processing: Verify payment gateway settings
-- QR generation: Ensure proper permissions for temp directories
-
-## Updates and Maintenance
-- Regular security updates
-- Database optimization
-- Performance monitoring
-- Bug fixes and feature enhancements
-
-## Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a pull request
-
 ## License
 This project is proprietary software. All rights reserved.
-
-## Support
-For technical support or queries:
-- Email: support@ktm.com.my
-- Phone: +60 XXXXXXXXX
-- Hours: 9 AM - 6 PM (MYT)
