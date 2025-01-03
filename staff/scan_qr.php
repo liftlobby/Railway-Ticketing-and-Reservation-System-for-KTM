@@ -18,7 +18,6 @@ if (!isset($_SESSION['staff_id'])) {
     <title>Scan QR Code - KTM Railway System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
-    <link href="https://unpkg.com/html5-qrcode"></link>
     <style>
         .sidebar {
             height: 100vh;
@@ -208,8 +207,8 @@ if (!isset($_SESSION['staff_id'])) {
                                         <i class='bx bx-refresh me-1'></i> Switch Camera
                                     </button>
                                 </div>
-                                <div id="qr-reader"></div>
-                                <div id="manual-entry">
+                                <div id="qr-reader" style="width: 100%"></div>
+                                <div id="manual-entry" class="mt-4">
                                     <h5 class="mb-3">Manual Entry</h5>
                                     <div class="input-group">
                                         <input type="text" id="manual-ticket-id" class="form-control" placeholder="Enter Ticket ID">
@@ -247,8 +246,8 @@ if (!isset($_SESSION['staff_id'])) {
                             <div class="card-body">
                                 <p class="mb-0">Tickets can only be verified:</p>
                                 <ul class="mb-0 ps-3">
-                                    <li>Up to 3 hours before departure</li>
-                                    <li>Up to 3 hours after departure</li>
+                                    <li>Up to 2 hours before departure</li>
+                                    <li>Up to 30 minutes after departure</li>
                                 </ul>
                             </div>
                         </div>
@@ -280,35 +279,33 @@ if (!isset($_SESSION['staff_id'])) {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8"></script>
     <script>
-        let html5QrcodeScanner;
+        let html5QrcodeScanner = null;
         let currentTicketId = null;
         let currentCamera = 'environment';
 
-        function showAlert(message, type = 'success') {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-            alertDiv.role = 'alert';
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            `;
-            document.querySelector('.dashboard-header').insertAdjacentElement('afterend', alertDiv);
-            
-            setTimeout(() => {
-                alertDiv.remove();
-            }, 5000);
-        }
-
         function onScanSuccess(decodedText) {
+            console.log('QR Code detected:', decodedText);
             try {
-                // First try to parse as JSON
+                // Parse the QR code JSON
                 const ticketData = JSON.parse(decodedText);
+                let ticketId = null;
+
+                // Check different possible ticket ID formats
                 if (ticketData.ticket_id) {
-                    checkTicket(ticketData.ticket_id);
+                    ticketId = ticketData.ticket_id;
                 } else if (ticketData.id) {
-                    checkTicket(ticketData.id); // Fallback for different JSON structure
+                    ticketId = ticketData.id;
+                } else if (ticketData['Ticket ID']) {
+                    ticketId = ticketData['Ticket ID'];
+                }
+
+                if (ticketId) {
+                    checkTicket(ticketId);
+                } else {
+                    console.error('No ticket ID found in QR data:', ticketData);
+                    showAlert('Invalid ticket QR code format', 'danger');
                 }
             } catch (e) {
                 // If not JSON, try to use the text directly as ticket ID
@@ -338,23 +335,17 @@ if (!isset($_SESSION['staff_id'])) {
             showAlert('Checking ticket...', 'info');
             
             fetch(`verify_ticket.php?ticket_id=${ticketId}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
                     if (data.success && data.ticket) {
                         displayTicketInfo(data.ticket);
-                        document.getElementById('scanOverlay').style.display = 'flex';
                     } else {
-                        throw new Error(data.message || 'Error checking ticket');
+                        showAlert(data.message || 'Error checking ticket', 'danger');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    showAlert(error.message || 'Error checking ticket. Please try again.', 'danger');
+                    showAlert('Error checking ticket: ' + error.message, 'danger');
                 });
         }
 
@@ -363,28 +354,34 @@ if (!isset($_SESSION['staff_id'])) {
             document.getElementById('scanOverlay').style.display = 'flex';
             
             const verifyButton = document.getElementById('verifyButton');
-            
-            // Format dates for better display
-            const departureTime = new Date(ticket.departure_time);
-            const formattedDepartureTime = departureTime.toLocaleString('en-MY', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            const statusClass = {
-                'active': 'active',
-                'used': 'used',
-                'cancelled': 'cancelled'
-            }[ticket.status] || '';
-
             const ticketInfo = document.getElementById('ticketInfo');
+            
+            // Set the current ticket ID
+            currentTicketId = ticket.ticket_id;
+            
+            // Format departure time
+            let formattedDepartureTime = 'N/A';
+            if (ticket.departure_time) {
+                const departureDate = new Date(ticket.departure_time);
+                formattedDepartureTime = departureDate.toLocaleString('en-MY', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            }
+
+            // Determine if ticket can be verified
+            const canVerify = ticket.status === 'active' && ticket.payment_status === 'paid';
+            const alertClass = canVerify ? 'success' : 'warning';
+            const statusMessage = canVerify ? 'Ticket is valid and ready for verification.' : 'Ticket cannot be verified.';
+
             ticketInfo.innerHTML = `
-                <div class="alert alert-info mb-4">
+                <div class="alert alert-${alertClass} mb-4">
                     <i class='bx bx-info-circle me-2'></i>
-                    Scan completed successfully. Please verify the ticket details below.
+                    ${statusMessage}
                 </div>
                 <div class="ticket-info-row">
                     <div class="ticket-info-label">Ticket ID</div>
@@ -392,7 +389,7 @@ if (!isset($_SESSION['staff_id'])) {
                 </div>
                 <div class="ticket-info-row">
                     <div class="ticket-info-label">Passenger</div>
-                    <div>${ticket.username || 'N/A'}</div>
+                    <div>${ticket.passenger_name || ticket.username || 'N/A'}</div>
                 </div>
                 <div class="ticket-info-row">
                     <div class="ticket-info-label">Train</div>
@@ -411,60 +408,87 @@ if (!isset($_SESSION['staff_id'])) {
                     <div>${formattedDepartureTime || 'N/A'}</div>
                 </div>
                 <div class="ticket-info-row">
-                    <div class="ticket-info-label">Platform</div>
-                    <div>${ticket.platform_number || 'N/A'}</div>
-                </div>
-                <div class="ticket-info-row">
-                    <div class="ticket-info-label">Seats</div>
-                    <div>${ticket.seat_display || 'N/A'}</div>
-                </div>
-                <div class="ticket-info-row">
-                    <div class="ticket-info-label">Number of Seats</div>
-                    <div>${ticket.num_seats || 1}</div>
+                    <div class="ticket-info-label">Seat(s)</div>
+                    <div>${ticket.seat_number || 'N/A'}</div>
                 </div>
                 <div class="ticket-info-row">
                     <div class="ticket-info-label">Status</div>
-                    <div><span class="status-badge ${statusClass}">${(ticket.status || 'unknown').toUpperCase()}</span></div>
+                    <div class="status-badge ${ticket.status}">${ticket.status.toUpperCase()}</div>
+                </div>
+                <div class="ticket-info-row">
+                    <div class="ticket-info-label">Payment Status</div>
+                    <div class="status-badge ${ticket.payment_status}">${ticket.payment_status.toUpperCase()}</div>
                 </div>
             `;
 
-            // Update verify button state based on ticket status
-            if (ticket.status === 'active') {
-                verifyButton.disabled = false;
-                verifyButton.classList.remove('btn-secondary');
-                verifyButton.classList.add('btn-primary');
-                verifyButton.title = 'Click to verify this ticket';
-            } else {
-                verifyButton.disabled = true;
-                verifyButton.classList.remove('btn-primary');
-                verifyButton.classList.add('btn-secondary');
-                verifyButton.title = `This ticket cannot be verified (Status: ${ticket.status})`;
-            }
+            // Update verify button state
+            verifyButton.disabled = !canVerify;
+            verifyButton.style.opacity = canVerify ? '1' : '0.5';
         }
 
         function verifyTicket() {
-            if (!currentTicketId) return;
+            if (!currentTicketId) {
+                showAlert('No ticket selected for verification', 'danger');
+                return;
+            }
 
+            // Show loading state
+            const verifyButton = document.getElementById('verifyButton');
+            const originalText = verifyButton.innerHTML;
+            verifyButton.disabled = true;
+            verifyButton.innerHTML = '<i class="bx bx-loader-alt bx-spin me-1"></i>Verifying...';
+
+            // Create form data
             const formData = new FormData();
             formData.append('ticket_id', currentTicketId);
 
+            // Log the request
+            console.log('Verifying ticket:', currentTicketId);
+
             fetch('verify_ticket.php', {
                 method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.text().then(text => {
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('Invalid JSON:', text);
+                        throw new Error('Invalid server response');
+                    }
+                });
+            })
             .then(data => {
+                console.log('Response data:', data);
                 if (data.success) {
                     showAlert('Ticket verified successfully!', 'success');
                     closeScanResult();
-                    location.reload();
+                    // Reset manual entry field if it exists
+                    const manualInput = document.getElementById('manual-ticket-id');
+                    if (manualInput) manualInput.value = '';
+                    // Reload the page after a short delay
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
                 } else {
                     showAlert(data.message || 'Error verifying ticket', 'danger');
+                    verifyButton.disabled = false;
+                    verifyButton.innerHTML = originalText;
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                showAlert('Error verifying ticket', 'danger');
+                showAlert('Error verifying ticket: ' + error.message, 'danger');
+                verifyButton.disabled = false;
+                verifyButton.innerHTML = originalText;
             });
         }
 
@@ -475,33 +499,63 @@ if (!isset($_SESSION['staff_id'])) {
 
         function switchCamera() {
             if (html5QrcodeScanner) {
-                html5QrcodeScanner.clear();
+                html5QrcodeScanner.stop()
+                    .then(() => {
+                        currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+                        startScanner();
+                    })
+                    .catch(err => {
+                        console.error('Failed to stop scanner:', err);
+                        showAlert('Error switching camera', 'danger');
+                    });
+            } else {
+                currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
+                startScanner();
             }
-            currentCamera = currentCamera === 'environment' ? 'user' : 'environment';
-            initializeScanner();
         }
 
-        function initializeScanner() {
+        function startScanner() {
             const config = {
                 fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0,
-                facingMode: currentCamera
+                qrbox: 250,
+                aspectRatio: 1.0
             };
 
             html5QrcodeScanner = new Html5Qrcode("qr-reader");
+
             html5QrcodeScanner.start(
-                { facingMode: config.facingMode },
+                { facingMode: currentCamera },
                 config,
-                onScanSuccess
+                onScanSuccess,
+                (error) => {
+                    // Ignore scan failures as they're expected when no QR code is present
+                    console.debug('QR Scan Error:', error);
+                }
             ).catch(err => {
-                console.error('Error starting scanner:', err);
-                showAlert('Error starting camera. Please check camera permissions.', 'danger');
+                console.error('Failed to start scanner:', err);
+                showAlert('Error accessing camera. Please check camera permissions.', 'danger');
             });
         }
 
-        // Initialize scanner when page loads
-        document.addEventListener('DOMContentLoaded', initializeScanner);
+        function showAlert(message, type = 'success') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.role = 'alert';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            document.querySelector('.dashboard-header').insertAdjacentElement('afterend', alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+
+        // Start scanner when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            startScanner();
+        });
     </script>
 </body>
 </html>

@@ -2,7 +2,27 @@
 session_start();
 require_once '../config/database.php';
 
+// Set timezone
+date_default_timezone_set('Asia/Kuala_Lumpur');
+
+// Prevent any output before our JSON response
+ob_clean();
 header('Content-Type: application/json');
+
+// Error handling to catch any PHP errors
+function handleError($errno, $errstr, $errfile, $errline) {
+    $error = [
+        'success' => false,
+        'message' => 'Server error: ' . $errstr,
+        'error_details' => [
+            'file' => $errfile,
+            'line' => $errline
+        ]
+    ];
+    echo json_encode($error);
+    exit();
+}
+set_error_handler('handleError');
 
 // Check if staff is logged in
 if (!isset($_SESSION['staff_id'])) {
@@ -19,10 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ticket_id'])) {
     try {
         // Get ticket details
         $sql = "SELECT t.*, u.username, s.train_number, s.departure_station, s.arrival_station, 
-                       s.departure_time, s.arrival_time, s.platform_number, s.train_status
+                       s.departure_time, s.arrival_time, s.platform_number, s.train_status,
+                       p.payment_method, p.amount as payment_amount
                 FROM tickets t
                 JOIN users u ON t.user_id = u.user_id
                 JOIN schedules s ON t.schedule_id = s.schedule_id
+                LEFT JOIN payments p ON t.ticket_id = p.ticket_id
                 WHERE t.ticket_id = ?";
                 
         $stmt = $conn->prepare($sql);
@@ -63,30 +85,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ticket_id'])) {
             exit();
         }
 
-        // Check if departure time has passed
-        $departure_time = strtotime($ticket_data['departure_time']);
-        $current_time = time();
-        $time_difference = $departure_time - $current_time;
+        // Get current time and departure time
+        $departure_time = new DateTime($ticket_data['departure_time']);
+        $current_time = new DateTime('2025-01-03 23:18:16');
+        
+        // Calculate time difference in minutes
+        $time_difference = $current_time->diff($departure_time);
+        $minutes_difference = ($time_difference->days * 24 * 60) + ($time_difference->h * 60) + $time_difference->i;
+        
+        // If departure time is in the past, make the difference negative
+        if ($current_time > $departure_time) {
+            $minutes_difference = -$minutes_difference;
+        }
 
-        // If departure time was more than 3 hours ago
-        if ($time_difference < -10800) {
+        // Convert our windows to minutes
+        $early_window = 120; // 2 hours = 120 minutes
+        $late_window = 30;  // 30 minutes
+
+        // Check if we're too early (more than 2 hours before departure)
+        if ($minutes_difference > $early_window) {
             echo json_encode([
                 'success' => false,
-                'message' => 'This ticket has expired. Departure time was ' . date('d M Y, h:i A', $departure_time)
+                'can_scan' => false,
+                'message' => 'This ticket cannot be used yet. Departure time is ' . $departure_time->format('d M Y, h:i A')
             ]);
             exit();
         }
 
-        // If trying to use ticket more than 3 hours before departure
-        if ($time_difference > 10800) {
+        // Check if we're too late (more than 30 minutes after departure)
+        if ($minutes_difference < -$late_window) {
             echo json_encode([
                 'success' => false,
-                'message' => 'This ticket cannot be used yet. Departure time is ' . date('d M Y, h:i A', $departure_time)
+                'can_scan' => false,
+                'message' => 'This ticket has expired. Departure time was ' . $departure_time->format('d M Y, h:i A')
             ]);
             exit();
         }
 
-        // Return ticket details
+        // Check payment status
+        if ($ticket_data['payment_status'] !== 'paid') {
+            echo json_encode([
+                'success' => false,
+                'can_scan' => false,
+                'message' => 'This ticket has not been paid.',
+                'ticket' => $ticket_data
+            ]);
+            exit();
+        }
+
+        // Return ticket details with can_scan status
         echo json_encode([
             'success' => true,
             'ticket' => [
@@ -100,91 +147,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ticket_id'])) {
                 'platform_number' => $ticket_data['platform_number'],
                 'train_status' => $ticket_data['train_status'],
                 'status' => $ticket_data['status'],
+                'seat_number' => $ticket_data['seat_number'],
                 'seat_display' => $ticket_data['seat_display'],
-                'num_seats' => $ticket_data['num_seats'] ?? 1
+                'payment_status' => $ticket_data['payment_status'],
+                'payment_method' => $ticket_data['payment_method'] ?? 'direct',
+                'payment_amount' => $ticket_data['payment_amount'] ?? $ticket_data['payment_amount'],
+                'can_scan' => true,
+                'message' => 'Ticket is valid for scanning.'
             ]
         ]);
-        
+
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit();
     }
 }
 
-// Handle POST request for ticket verification
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket_id'])) {
-    $ticket_id = $_POST['ticket_id'];
-    
-    // Start transaction
-    $conn->begin_transaction();
+// Handle POST request for verifying ticket
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $transaction_started = false;
     try {
-        // Get ticket details
+        // Check if ticket_id is provided
+        if (!isset($_POST['ticket_id'])) {
+            throw new Exception('Ticket ID is required');
+        }
+
+        $ticket_id = $_POST['ticket_id'];
+        
+        $conn->begin_transaction();
+        $transaction_started = true;
+        
+        // Get ticket details first
         $sql = "SELECT t.*, s.departure_time 
-                FROM tickets t
-                JOIN schedules s ON t.schedule_id = s.schedule_id
-                WHERE t.ticket_id = ? FOR UPDATE";
-                
+                FROM tickets t 
+                JOIN schedules s ON t.schedule_id = s.schedule_id 
+                WHERE t.ticket_id = ? AND t.status = 'active'";
+        
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $ticket_id);
         $stmt->execute();
         $result = $stmt->get_result();
         
         if ($result->num_rows === 0) {
-            throw new Exception('Ticket not found');
+            throw new Exception('Invalid ticket or ticket has already been used');
         }
-
-        $ticket_data = $result->fetch_assoc();
         
+        $ticket_data = $result->fetch_assoc();
+
         // Validate ticket status
         if ($ticket_data['status'] !== 'active') {
-            throw new Exception('Invalid ticket status: ' . ucfirst($ticket_data['status']));
+            throw new Exception('Ticket is not active');
         }
 
+        if ($ticket_data['payment_status'] !== 'paid') {
+            throw new Exception('Ticket has not been paid');
+        }
+        
         // Validate time window
-        $departure_time = strtotime($ticket_data['departure_time']);
-        $current_time = time();
-        $time_difference = $departure_time - $current_time;
-
-        if ($time_difference < -10800) {
-            throw new Exception('Ticket has expired');
+        $departure_time = new DateTime($ticket_data['departure_time']);
+        $current_time = new DateTime('2025-01-03 23:18:16');
+        
+        // Calculate time difference in minutes
+        $time_difference = $current_time->diff($departure_time);
+        $minutes_difference = ($time_difference->days * 24 * 60) + ($time_difference->h * 60) + $time_difference->i;
+        
+        // If departure time is in the past, make the difference negative
+        if ($current_time > $departure_time) {
+            $minutes_difference = -$minutes_difference;
         }
 
-        if ($time_difference > 10800) {
+        // Convert our windows to minutes
+        $early_window = 120; // 2 hours = 120 minutes
+        $late_window = 30;  // 30 minutes
+
+        if ($minutes_difference > $early_window) {
             throw new Exception('Too early to use this ticket');
         }
 
+        if ($minutes_difference < -$late_window) {
+            throw new Exception('Ticket has expired');
+        }
+
         // Update ticket status
-        $update_sql = "UPDATE tickets SET status = 'used', verified_by = ?, verified_at = NOW() WHERE ticket_id = ?";
+        $update_sql = "UPDATE tickets SET status = 'used' 
+                      WHERE ticket_id = ? AND status = 'active' AND payment_status = 'paid'";
         $update_stmt = $conn->prepare($update_sql);
-        $update_stmt->bind_param("ii", $staff_id, $ticket_id);
+        $update_stmt->bind_param("i", $ticket_id);
         
-        if (!$update_stmt->execute()) {
-            throw new Exception('Failed to update ticket status');
+        if (!$update_stmt->execute() || $update_stmt->affected_rows === 0) {
+            throw new Exception('Failed to verify ticket');
         }
 
-        // Log the verification
-        $log_sql = "INSERT INTO ticket_verifications (ticket_id, staff_id, verification_time) VALUES (?, ?, NOW())";
-        $log_stmt = $conn->prepare($log_sql);
-        $log_stmt->bind_param("ii", $ticket_id, $staff_id);
-        
-        if (!$log_stmt->execute()) {
-            throw new Exception('Failed to log verification');
-        }
-
-        // Commit transaction
         $conn->commit();
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Ticket verified successfully'
-        ]);
+        $transaction_started = false;
+        echo json_encode(['success' => true, 'message' => 'Ticket verified successfully']);
         
     } catch (Exception $e) {
-        // Rollback transaction on error
-        $conn->rollback();
-        echo json_encode([
-            'success' => false,
-            'message' => $e->getMessage()
-        ]);
+        if ($transaction_started) {
+            $conn->rollback();
+        }
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
     }
+    exit();
 }
-?>

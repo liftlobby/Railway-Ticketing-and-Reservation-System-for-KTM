@@ -2,7 +2,6 @@
 session_start();
 require_once 'config/database.php';
 require_once 'phpqrcode/qrlib.php';
-require_once 'includes/TokenManager.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -20,14 +19,9 @@ $ticket_id = $_GET['ticket_id'];
 $user_id = $_SESSION['user_id'];
 
 try {
-    // Initialize TokenManager
-    $tokenManager = new TokenManager($conn);
-
     // Fetch ticket details with schedule information
-    $sql = "SELECT t.*, s.train_number, s.departure_station, s.arrival_station, 
-                   s.departure_time, s.arrival_time, s.price
+    $sql = "SELECT t.qr_code 
             FROM tickets t
-            JOIN schedules s ON t.schedule_id = s.schedule_id
             WHERE t.ticket_id = ? AND t.user_id = ?";
 
     $stmt = $conn->prepare($sql);
@@ -40,25 +34,7 @@ try {
     }
 
     $ticket = $result->fetch_assoc();
-
-    // Generate secure token
-    $token = $tokenManager->generateSecureToken($ticket_id, $user_id);
-
-    // Create QR code data array
-    $qrData = array(
-        'token' => $token,
-        'Ticket ID' => $ticket['ticket_id'],
-        'Train' => $ticket['train_number'],
-        'From' => $ticket['departure_station'],
-        'To' => $ticket['arrival_station'],
-        'Departure' => date('d M Y, h:i A', strtotime($ticket['departure_time'])),
-        'Arrival' => date('d M Y, h:i A', strtotime($ticket['arrival_time'])),
-        'Seat' => $ticket['seat_number'],
-        'Status' => $ticket['status']
-    );
-
-    // Convert array to JSON
-    $qrContent = json_encode($qrData);
+    $qrContent = $ticket['qr_code'];
 
     // Set header to image/png
     header('Content-Type: image/png');
