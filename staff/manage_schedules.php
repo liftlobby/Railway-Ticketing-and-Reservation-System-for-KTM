@@ -69,37 +69,8 @@ function getStatusBadgeColor($status) {
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-2 sidebar">
-                <h3 class="mb-4">Staff Dashboard</h3>
-                <nav class="nav flex-column">
-                    <a class="nav-link" href="dashboard.php">
-                        <i class='bx bxs-dashboard'></i> Dashboard
-                    </a>
-                    <a class="nav-link active" href="manage_schedules.php">
-                        <i class='bx bx-time-five'></i> Manage Schedules
-                    </a>
-                    <a class="nav-link" href="manage_tickets.php">
-                        <i class='bx bx-ticket'></i> Manage Tickets
-                    </a>
-                    <a class="nav-link" href="manage_users.php">
-                        <i class='bx bx-user'></i> Manage Users
-                    </a>
-                    <a class="nav-link" href="scan_qr.php">
-                        <i class='bx bx-qr-scan'></i> Scan QR
-                    </a>
-                    <?php if ($_SESSION['staff_role'] === 'admin'): ?>
-                    <a class="nav-link" href="manage_staff.php">
-                        <i class='bx bx-group'></i> Manage Staff
-                    </a>
-                    <?php endif; ?>
-                    <a class="nav-link" href="logout.php">
-                        <i class='bx bx-log-out'></i> Logout
-                    </a>
-                </nav>
-            </div>
-
-            <!-- Main Content -->
+            <?php include 'sidebar.php'; ?>
+            
             <div class="col-md-10 content">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2>Manage Schedules</h2>
@@ -114,7 +85,6 @@ function getStatusBadgeColor($status) {
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
-                                        <th>ID</th>
                                         <th>Train</th>
                                         <th>From</th>
                                         <th>To</th>
@@ -130,7 +100,6 @@ function getStatusBadgeColor($status) {
                                 <tbody>
                                     <?php while ($schedule = $schedules->fetch_assoc()): ?>
                                     <tr>
-                                        <td><?php echo $schedule['schedule_id']; ?></td>
                                         <td><?php echo htmlspecialchars($schedule['train_number']); ?></td>
                                         <td><?php echo htmlspecialchars($schedule['departure_station']); ?></td>
                                         <td><?php echo htmlspecialchars($schedule['arrival_station']); ?></td>

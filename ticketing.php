@@ -202,6 +202,24 @@ $result = $conn->query($sql);
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             color: #666;
         }
+
+        .passenger-info {
+            margin: 15px 0;
+        }
+
+        .passenger-info label {
+            display: block;
+            margin-bottom: 5px;
+            color: #003366;
+        }
+
+        .passenger-info input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
@@ -253,13 +271,24 @@ $result = $conn->query($sql);
                                     <select name="ticket_quantity" 
                                             id="ticket_quantity_<?php echo $schedule['schedule_id']; ?>"
                                             onchange="updateTotalPrice(this, <?php echo $schedule['price']; ?>)">
-                                        <?php for ($i = 1; $i <= min(5, $schedule['available_seats']); $i++): ?>
+                                        <?php for ($i = 1; $i <= min(4, $schedule['available_seats']); $i++): ?>
                                             <option value="<?php echo $i; ?>"><?php echo $i; ?></option>
                                         <?php endfor; ?>
                                     </select>
                                     <div class="total-price" id="total_price_<?php echo $schedule['schedule_id']; ?>">
                                         Total: RM <?php echo number_format($schedule['price'], 2); ?>
                                     </div>
+                                </div>
+                                <div class="passenger-info">
+                                    <label for="passenger_name_<?php echo $schedule['schedule_id']; ?>">
+                                        Passenger Name:
+                                    </label>
+                                    <input type="text" 
+                                           name="passenger_name" 
+                                           id="passenger_name_<?php echo $schedule['schedule_id']; ?>"
+                                           class="form-control" 
+                                           required
+                                           placeholder="Enter passenger name">
                                 </div>
                                 <button type="submit" 
                                         class="book-button <?php echo $schedule['booking_status'] == 'closing' ? 'closing' : ''; ?>">

@@ -93,7 +93,30 @@ class PasswordHandler {
      * Get remaining attempts before lockout
      */
     public static function getRemainingAttempts($failedAttempts) {
-        return max(0, self::MAX_FAILED_ATTEMPTS - $failedAttempts);
+        $remaining = self::MAX_FAILED_ATTEMPTS - $failedAttempts;
+        return max(0, $remaining);
+    }
+
+    /**
+     * Get warning message based on remaining attempts
+     */
+    public static function getLoginAttemptMessage($failedAttempts) {
+        $remaining = self::getRemainingAttempts($failedAttempts);
+        
+        if ($remaining === 0) {
+            return "Account has been locked due to too many failed attempts. Try again after " . self::LOCKOUT_DURATION . " minutes.";
+        }
+        
+        $message = "Invalid credentials. ";
+        if ($remaining === 1) {
+            $message .= "This is your LAST attempt before account lockout!";
+        } elseif ($remaining === 2) {
+            $message .= "Warning: Only {$remaining} attempts remaining before account lockout!";
+        } else {
+            $message .= "{$remaining} attempts remaining before account lockout.";
+        }
+        
+        return $message;
     }
 
     /**

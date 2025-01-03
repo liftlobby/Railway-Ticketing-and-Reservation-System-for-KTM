@@ -1,11 +1,60 @@
 <?php
 session_start();
 require_once '../config/database.php';
+require_once '../includes/MessageUtility.php';
 
 // Check if staff is logged in
 if (!isset($_SESSION['staff_id'])) {
     header("Location: login.php");
     exit();
+}
+
+// Handle ticket actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action'])) {
+        $ticket_id = $_POST['ticket_id'];
+        
+        if ($_POST['action'] === 'verify') {
+            // Verify ticket
+            $stmt = $conn->prepare("UPDATE tickets SET status = 'completed' WHERE ticket_id = ?");
+            $stmt->bind_param("i", $ticket_id);
+            
+            if ($stmt->execute()) {
+                // Add verification record
+                $staff_id = $_SESSION['staff_id'];
+                $stmt = $conn->prepare("INSERT INTO ticket_verifications (ticket_id, staff_id, verification_time, status) VALUES (?, ?, NOW(), 'success')");
+                $stmt->bind_param("ii", $ticket_id, $staff_id);
+                $stmt->execute();
+                
+                MessageUtility::setSuccessMessage("Ticket verified successfully!");
+            } else {
+                MessageUtility::setErrorMessage("Failed to verify ticket.");
+            }
+        } elseif ($_POST['action'] === 'cancel') {
+            // Cancel ticket
+            $stmt = $conn->prepare("UPDATE tickets SET status = 'cancelled' WHERE ticket_id = ?");
+            $stmt->bind_param("i", $ticket_id);
+            
+            if ($stmt->execute()) {
+                // Create refund record
+                $stmt = $conn->prepare("SELECT payment_amount FROM tickets WHERE ticket_id = ?");
+                $stmt->bind_param("i", $ticket_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $ticket = $result->fetch_assoc();
+                
+                $staff_id = $_SESSION['staff_id'];
+                $amount = $ticket['payment_amount'];
+                $stmt = $conn->prepare("INSERT INTO refunds (ticket_id, amount, refund_date, status, processed_by) VALUES (?, ?, NOW(), 'pending', ?)");
+                $stmt->bind_param("idi", $ticket_id, $amount, $staff_id);
+                $stmt->execute();
+                
+                MessageUtility::setSuccessMessage("Ticket cancelled and refund initiated!");
+            } else {
+                MessageUtility::setErrorMessage("Failed to cancel ticket.");
+            }
+        }
+    }
 }
 
 // Fetch all tickets with user details
@@ -65,7 +114,7 @@ $tickets = $conn->query($sql);
             background-color: #d4edda;
             color: #155724;
         }
-        .ticket-status.used {
+        .ticket-status.completed {
             background-color: #cce5ff;
             color: #004085;
         }
@@ -73,63 +122,70 @@ $tickets = $conn->query($sql);
             background-color: #f8d7da;
             color: #721c24;
         }
-        .ticket-status.expired {
-            background-color: #e2e3e5;
-            color: #383d41;
+        .dashboard-header {
+            margin-bottom: 30px;
+        }
+        .dashboard-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .card {
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            border: none;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .btn-action {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            border-radius: 0.2rem;
+        }
+        .modal-content {
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .modal-header {
+            background-color: #f8f9fa;
+            border-radius: 8px 8px 0 0;
+        }
+        .modal-body h6 {
+            color: #0056b3;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
 <body>
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-2 sidebar">
-                <h3 class="mb-4">Staff Dashboard</h3>
-                <nav class="nav flex-column">
-                    <a class="nav-link" href="dashboard.php">
-                        <i class='bx bxs-dashboard'></i> Dashboard
-                    </a>
-                    <a class="nav-link" href="manage_schedules.php">
-                        <i class='bx bx-time-five'></i> Manage Schedules
-                    </a>
-                    <a class="nav-link active" href="manage_tickets.php">
-                        <i class='bx bx-ticket'></i> Manage Tickets
-                    </a>
-                    <a class="nav-link" href="manage_users.php">
-                        <i class='bx bx-user'></i> Manage Users
-                    </a>
-                    <a class="nav-link" href="scan_qr.php">
-                        <i class='bx bx-qr-scan'></i> Scan QR
-                    </a>
-                    <?php if ($_SESSION['staff_role'] === 'admin'): ?>
-                    <a class="nav-link" href="manage_staff.php">
-                        <i class='bx bx-group'></i> Manage Staff
-                    </a>
-                    <?php endif; ?>
-                    <a class="nav-link" href="logout.php">
-                        <i class='bx bx-log-out'></i> Logout
-                    </a>
-                </nav>
-            </div>
+            <?php include 'sidebar.php'; ?>
 
             <!-- Main Content -->
-            <div class="col-md-10 content">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="col content">
+                <div class="dashboard-header">
                     <h2>Manage Tickets</h2>
-                    <div>
-                        <button class="btn btn-primary me-2" onclick="window.location.href='scan_qr.php'">
-                            <i class='bx bx-qr-scan'></i> Scan QR Code
-                        </button>
-                        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#verifyTicketModal">
-                            <i class='bx bx-check-circle'></i> Verify Ticket
-                        </button>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <p class="text-muted mb-0">View and manage all ticket bookings</p>
+                        <div>
+                            <button class="btn btn-primary me-2" onclick="window.location.href='scan_qr.php'">
+                                <i class='bx bx-qr-scan'></i> Scan QR Code
+                            </button>
+                            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#verifyTicketModal">
+                                <i class='bx bx-check-circle'></i> Verify Ticket
+                            </button>
+                        </div>
                     </div>
                 </div>
+
+                <?php MessageUtility::displayMessages(); ?>
 
                 <div class="card">
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table class="table table-striped">
+                            <table class="table table-hover">
                                 <thead>
                                     <tr>
                                         <th>Ticket ID</th>
@@ -160,16 +216,24 @@ $tickets = $conn->query($sql);
                                         </td>
                                         <td><?php echo date('d M Y, h:i A', strtotime($ticket['booking_date'])); ?></td>
                                         <td>
-                                            <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detailsModal<?php echo $ticket['ticket_id']; ?>">
+                                            <button class="btn btn-info btn-action" data-bs-toggle="modal" data-bs-target="#detailsModal<?php echo $ticket['ticket_id']; ?>">
                                                 <i class='bx bx-info-circle'></i>
                                             </button>
                                             <?php if ($ticket['status'] === 'active'): ?>
-                                            <button class="btn btn-sm btn-success" onclick="verifyTicket(<?php echo $ticket['ticket_id']; ?>)">
-                                                <i class='bx bx-check'></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-danger" onclick="cancelTicket(<?php echo $ticket['ticket_id']; ?>)">
-                                                <i class='bx bx-x'></i>
-                                            </button>
+                                            <form method="POST" style="display: inline;">
+                                                <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                                <input type="hidden" name="action" value="verify">
+                                                <button type="submit" class="btn btn-success btn-action">
+                                                    <i class='bx bx-check'></i>
+                                                </button>
+                                            </form>
+                                            <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to cancel this ticket?');">
+                                                <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                                <input type="hidden" name="action" value="cancel">
+                                                <button type="submit" class="btn btn-danger btn-action">
+                                                    <i class='bx bx-x'></i>
+                                                </button>
+                                            </form>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -179,31 +243,46 @@ $tickets = $conn->query($sql);
                                         <div class="modal-dialog">
                                             <div class="modal-content">
                                                 <div class="modal-header">
-                                                    <h5 class="modal-title">Ticket Details</h5>
+                                                    <h5 class="modal-title">Ticket Details #<?php echo $ticket['ticket_id']; ?></h5>
                                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <div class="modal-body">
-                                                    <div class="mb-3">
+                                                    <div class="mb-4">
                                                         <h6>Passenger Information</h6>
-                                                        <p><strong>Username:</strong> <?php echo htmlspecialchars($ticket['username']); ?></p>
+                                                        <p class="mb-1"><strong>Username:</strong> <?php echo htmlspecialchars($ticket['username']); ?></p>
+                                                        <p class="mb-1"><strong>Passenger Name:</strong> <?php echo htmlspecialchars($ticket['passenger_name'] ?? 'Not specified'); ?></p>
+                                                        <p class="mb-0"><strong>Seat Number:</strong> <?php echo htmlspecialchars($ticket['seat_number']); ?></p>
                                                     </div>
-                                                    <div class="mb-3">
+                                                    <div class="mb-4">
                                                         <h6>Journey Details</h6>
-                                                        <p><strong>Train:</strong> <?php echo htmlspecialchars($ticket['train_number']); ?></p>
-                                                        <p><strong>From:</strong> <?php echo htmlspecialchars($ticket['departure_station']); ?></p>
-                                                        <p><strong>To:</strong> <?php echo htmlspecialchars($ticket['arrival_station']); ?></p>
-                                                        <p><strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['departure_time'])); ?></p>
-                                                        <p><strong>Arrival:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['arrival_time'])); ?></p>
+                                                        <p class="mb-1"><strong>Train:</strong> <?php echo htmlspecialchars($ticket['train_number']); ?></p>
+                                                        <p class="mb-1"><strong>From:</strong> <?php echo htmlspecialchars($ticket['departure_station']); ?></p>
+                                                        <p class="mb-1"><strong>To:</strong> <?php echo htmlspecialchars($ticket['arrival_station']); ?></p>
+                                                        <p class="mb-1"><strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['departure_time'])); ?></p>
+                                                        <p class="mb-0"><strong>Arrival:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['arrival_time'])); ?></p>
                                                     </div>
-                                                    <div class="mb-3">
-                                                        <h6>Ticket Information</h6>
-                                                        <p><strong>Price:</strong> RM <?php echo number_format($ticket['price'], 2); ?></p>
-                                                        <p><strong>Status:</strong> <?php echo ucfirst($ticket['status']); ?></p>
-                                                        <p><strong>Booking Date:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['booking_date'])); ?></p>
+                                                    <div class="mb-4">
+                                                        <h6>Payment Information</h6>
+                                                        <p class="mb-1"><strong>Amount:</strong> RM<?php echo number_format($ticket['payment_amount'], 2); ?></p>
+                                                        <p class="mb-1"><strong>Status:</strong> <?php echo ucfirst($ticket['payment_status']); ?></p>
+                                                        <p class="mb-0"><strong>Booking Date:</strong> <?php echo date('d M Y, h:i A', strtotime($ticket['booking_date'])); ?></p>
                                                     </div>
+                                                    <?php if ($ticket['special_requests']): ?>
+                                                    <div>
+                                                        <h6>Special Requests</h6>
+                                                        <p class="mb-0"><?php echo nl2br(htmlspecialchars($ticket['special_requests'])); ?></p>
+                                                    </div>
+                                                    <?php endif; ?>
                                                 </div>
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    <?php if ($ticket['status'] === 'active'): ?>
+                                                    <form method="POST" style="display: inline;">
+                                                        <input type="hidden" name="ticket_id" value="<?php echo $ticket['ticket_id']; ?>">
+                                                        <input type="hidden" name="action" value="verify">
+                                                        <button type="submit" class="btn btn-success">Verify Ticket</button>
+                                                    </form>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -226,70 +305,23 @@ $tickets = $conn->query($sql);
                     <h5 class="modal-title">Verify Ticket</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="ticket_actions.php" method="post">
-                    <div class="modal-body">
+                <div class="modal-body">
+                    <form method="POST">
                         <input type="hidden" name="action" value="verify">
                         <div class="mb-3">
-                            <label>Ticket ID</label>
-                            <input type="text" class="form-control" name="ticket_id" required>
+                            <label for="ticketId" class="form-label">Ticket ID</label>
+                            <input type="number" class="form-control" id="ticketId" name="ticket_id" required>
                         </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-success">Verify Ticket</button>
-                    </div>
-                </form>
+                        <div class="text-end">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success">Verify Ticket</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function verifyTicket(ticketId) {
-            if (confirm('Are you sure you want to verify this ticket?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'ticket_actions.php';
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'action';
-                actionInput.value = 'verify';
-                
-                const idInput = document.createElement('input');
-                idInput.type = 'hidden';
-                idInput.name = 'ticket_id';
-                idInput.value = ticketId;
-                
-                form.appendChild(actionInput);
-                form.appendChild(idInput);
-                document.body.appendChild(form);
-                form.submit();
-            }
-        }
-
-        function cancelTicket(ticketId) {
-            if (confirm('Are you sure you want to cancel this ticket?')) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'ticket_actions.php';
-                
-                const actionInput = document.createElement('input');
-                actionInput.type = 'hidden';
-                actionInput.name = 'action';
-                actionInput.value = 'cancel';
-                
-                const idInput = document.createElement('input');
-                idInput.type = 'hidden';
-                idInput.name = 'ticket_id';
-                idInput.value = ticketId;
-                
-                form.appendChild(actionInput);
-                form.appendChild(idInput);
-                document.body.appendChild(form);
-                form.submit();
-            }
-        }
-    </script>
 </body>
 </html>
