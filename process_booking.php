@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
+require_once 'includes/TokenManager.php';
 
 if (!isset($_SESSION['user_id']) || !isset($_POST['schedule_id']) || !isset($_POST['ticket_quantity']) || !isset($_POST['price'])) {
     header("Location: ticketing.php");
@@ -36,11 +37,11 @@ try {
 
     // Check if train has already departed (5 minutes buffer for last-minute bookings)
     $buffer_time = date('Y-m-d H:i:s', strtotime('+5 minutes'));
-    $check_departure_sql = "SELECT departure_time, available_seats, price 
-                           FROM schedules 
-                           WHERE schedule_id = ? 
-                           AND departure_time > ?
-                           AND available_seats >= ?";
+    $check_departure_sql = "SELECT s.*, s.train_number, s.departure_station, s.arrival_station 
+                           FROM schedules s 
+                           WHERE s.schedule_id = ? 
+                           AND s.departure_time > ?
+                           AND s.available_seats >= ?";
                            
     $check_stmt = $conn->prepare($check_departure_sql);
     $check_stmt->bind_param("isi", $schedule_id, $buffer_time, $ticket_quantity);
@@ -76,38 +77,42 @@ try {
     $end_seat = $start_seat + $ticket_quantity - 1;
     $seat_range = "A$start_seat-A$end_seat";
 
-    // Generate QR code data - using a stable format
-    $qr_data = json_encode([
-        'ticket_id' => null, // Will be updated after insert
-        'schedule_id' => $schedule_id,
-        'seats' => $seat_range,
-        'passenger' => $passenger_name
-    ], JSON_UNESCAPED_SLASHES);
-    
-    // Insert single ticket for multiple seats
-    $insert_sql = "INSERT INTO tickets (user_id, schedule_id, seat_number, num_seats, passenger_name, status, booking_date, payment_amount, qr_code) 
-                   VALUES (?, ?, ?, ?, ?, 'pending', NOW(), ?, ?)";
+    // Insert single ticket for multiple seats (with temporary QR code)
+    $insert_sql = "INSERT INTO tickets (user_id, schedule_id, seat_number, num_seats, passenger_name, status, booking_date, payment_amount, qr_code, payment_status) 
+                   VALUES (?, ?, ?, ?, ?, 'active', NOW(), ?, 'temp', 'paid')";
     $total_amount = $price * $ticket_quantity;
     $insert_stmt = $conn->prepare($insert_sql);
-    $insert_stmt->bind_param("issisds", $user_id, $schedule_id, $seat_range, $ticket_quantity, $passenger_name, $total_amount, $qr_data);
+    $insert_stmt->bind_param("issisi", $user_id, $schedule_id, $seat_range, $ticket_quantity, $passenger_name, $total_amount);
     
     if (!$insert_stmt->execute()) {
         throw new Exception("Failed to create ticket.");
     }
     $ticket_id = $conn->insert_id;
 
-    // Update the QR code with the ticket ID
-    $qr_data = json_encode([
-        'ticket_id' => $ticket_id,
-        'schedule_id' => $schedule_id,
-        'seats' => $seat_range,
-        'passenger' => $passenger_name
-    ], JSON_UNESCAPED_SLASHES);
+    // Initialize TokenManager
+    $tokenManager = new TokenManager($conn);
+    $token = $tokenManager->generateSecureToken($ticket_id, $user_id);
 
-    // Update the ticket with the final QR code
+    // Create QR code data
+    $qrData = array(
+        'token' => $token,
+        'Ticket ID' => $ticket_id,
+        'Train' => $schedule_data['train_number'],
+        'From' => $schedule_data['departure_station'],
+        'To' => $schedule_data['arrival_station'],
+        'Departure' => date('d M Y, h:i A', strtotime($schedule_data['departure_time'])),
+        'Arrival' => date('d M Y, h:i A', strtotime($schedule_data['arrival_time'])),
+        'Seat' => $seat_range,
+        'Status' => 'active'
+    );
+
+    // Convert to JSON and store
+    $qr_code = json_encode($qrData);
+
+    // Update the QR code
     $update_qr_sql = "UPDATE tickets SET qr_code = ? WHERE ticket_id = ?";
     $update_qr_stmt = $conn->prepare($update_qr_sql);
-    $update_qr_stmt->bind_param("si", $qr_data, $ticket_id);
+    $update_qr_stmt->bind_param("si", $qr_code, $ticket_id);
     $update_qr_stmt->execute();
 
     // Update available seats with a final check
@@ -124,6 +129,15 @@ try {
         throw new Exception("Failed to update seat availability or train has departed.");
     }
 
+    // Create payment record
+    $transaction_id = uniqid('PAY_', true);
+    $payment_method = 'direct'; // Default payment method
+    $payment_sql = "INSERT INTO payments (ticket_id, payment_method, amount, payment_date, status, transaction_id) 
+                    VALUES (?, ?, ?, NOW(), 'completed', ?)";
+    $payment_stmt = $conn->prepare($payment_sql);
+    $payment_stmt->bind_param("isds", $ticket_id, $payment_method, $total_amount, $transaction_id);
+    $payment_stmt->execute();
+
     $conn->commit();
     
     // Store booking information in session
@@ -131,8 +145,8 @@ try {
     $_SESSION['total_price'] = $total_amount;
     $_SESSION['ticket_quantity'] = $ticket_quantity;
     
-    // Redirect to payment page
-    header("Location: payment.php");
+    // Redirect to payment success page directly
+    header("Location: payment_success.php?transaction_id=" . urlencode($transaction_id));
     exit();
 
 } catch (Exception $e) {
