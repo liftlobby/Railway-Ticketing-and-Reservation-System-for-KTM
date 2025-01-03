@@ -25,7 +25,6 @@
             <?php else: ?>
                 <!-- Navigation for guests -->
                 <a href="schedules.php">Schedules</a>
-                <a href="QRCode.php">QR Onboard</a>
                 <a href="about_us.php">About Us</a>
                 <a href="login.php">Login/Register</a>
             <?php endif; ?>
