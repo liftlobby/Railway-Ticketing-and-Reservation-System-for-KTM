@@ -10,6 +10,13 @@ if (isset($_SESSION['user_id'])) {
     exit();
 }
 
+$form_errors = [];
+$form_data = [
+    'username' => '',
+    'email' => '',
+    'no_phone' => ''
+];
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Sanitize inputs
     $username = filter_input(INPUT_POST, 'username', FILTER_SANITIZE_STRING);
@@ -18,283 +25,349 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
 
-    $errors = [];
+    // Store form data for repopulating the form
+    $form_data = [
+        'username' => $username,
+        'email' => $email,
+        'no_phone' => $phone
+    ];
 
     // Validate username
     if (!preg_match('/^[a-zA-Z0-9_]{4,20}$/', $username)) {
-        $errors[] = MessageUtility::getCommonErrorMessage('username_invalid');
+        $form_errors['username'] = 'Username must be 4-20 characters long and can only contain letters, numbers, and underscores';
     }
 
     // Validate email
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = MessageUtility::getCommonErrorMessage('invalid_email');
+        $form_errors['email'] = 'Please enter a valid email address';
     }
 
     // Validate phone number
     if (!preg_match('/^[0-9]{10,15}$/', $phone)) {
-        $errors[] = MessageUtility::getCommonErrorMessage('invalid_phone');
+        $form_errors['phone'] = 'Phone number must be 10-15 digits long';
     }
 
     // Validate password match
     if ($password !== $confirm_password) {
-        $errors[] = MessageUtility::getCommonErrorMessage('passwords_not_match');
+        $form_errors['confirm_password'] = 'Passwords do not match';
     }
 
     // Validate password strength
     $password_errors = PasswordUtility::validatePasswordStrength($password);
-    $errors = array_merge($errors, $password_errors);
+    if (!empty($password_errors)) {
+        $form_errors['password'] = implode(' ', $password_errors);
+    }
 
-    if (empty($errors)) {
-        // Check if username already exists
-        $stmt = $conn->prepare("SELECT user_id FROM users WHERE username = ?");
-        $stmt->bind_param("s", $username);
-        $stmt->execute();
-        if ($stmt->get_result()->num_rows > 0) {
-            MessageUtility::setErrorMessage(MessageUtility::getCommonErrorMessage('username_exists'));
-            header("Location: register.php");
-            exit();
-        }
-
-        // Check if email already exists
-        $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        if ($stmt->get_result()->num_rows > 0) {
-            MessageUtility::setErrorMessage(MessageUtility::getCommonErrorMessage('email_exists'));
-            header("Location: register.php");
-            exit();
-        }
-
+    if (empty($form_errors)) {
         try {
+            // Check if username already exists
+            $stmt = $conn->prepare("SELECT user_id FROM users WHERE username = ?");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            if ($stmt->get_result()->num_rows > 0) {
+                $form_errors['username'] = 'This username is already taken. Please choose another one.';
+                throw new Exception('Username exists');
+            }
+
+            // Check if email already exists
+            $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+            if ($stmt->get_result()->num_rows > 0) {
+                $form_errors['email'] = 'This email is already registered. Please use a different email or try logging in.';
+                throw new Exception('Email exists');
+            }
+
             // Hash password
             $hashed_password = PasswordUtility::hashPassword($password);
 
             // Begin transaction
             $conn->begin_transaction();
 
-            // Insert new user
-            $stmt = $conn->prepare("INSERT INTO users (username, email, no_phone, password, created_at) VALUES (?, ?, ?, ?, NOW())");
-            $stmt->bind_param("ssss", $username, $email, $phone, $hashed_password);
+            try {
+                // Insert new user
+                $stmt = $conn->prepare("INSERT INTO users (username, email, no_phone, password, created_at) VALUES (?, ?, ?, ?, NOW())");
+                $stmt->bind_param("ssss", $username, $email, $phone, $hashed_password);
 
-            if ($stmt->execute()) {
-                // Log the registration
-                $user_id = $conn->insert_id;
-                $logStmt = $conn->prepare("INSERT INTO activity_logs (user_id, action, description, ip_address, user_agent) VALUES (?, 'registration', 'New user registration', ?, ?)");
-                $logStmt->bind_param("iss", $user_id, $_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']);
-                $logStmt->execute();
+                if ($stmt->execute()) {
+                    // Log the registration
+                    $user_id = $conn->insert_id;
+                    $logStmt = $conn->prepare("INSERT INTO activity_logs (user_id, action, description, ip_address, user_agent) VALUES (?, 'registration', 'New user registration', ?, ?)");
+                    $logStmt->bind_param("iss", $user_id, $_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']);
+                    $logStmt->execute();
 
-                // Commit transaction
-                $conn->commit();
+                    // Commit transaction
+                    $conn->commit();
 
-                MessageUtility::setSuccessMessage("Registration successful! Please login with your credentials.");
-                header("Location: login.php");
-                exit();
-            } else {
-                throw new Exception("Registration failed");
+                    // Set success message and username for the success page
+                    $_SESSION['registration_success'] = "Welcome to KTM Railway System! Your account has been created successfully.";
+                    $_SESSION['registered_username'] = $username;
+                    
+                    // Redirect to success page
+                    header("Location: register_success.php");
+                    exit();
+                } else {
+                    // Rollback if insert fails
+                    $conn->rollback();
+                    throw new Exception("Registration failed");
+                }
+            } catch (Exception $e) {
+                // Rollback on any error within the transaction
+                $conn->rollback();
+                throw $e;
             }
         } catch (Exception $e) {
-            // Rollback transaction on error
-            $conn->rollback();
-            MessageUtility::setErrorMessage(MessageUtility::getCommonErrorMessage('server_error'));
-        }
-    } else {
-        foreach ($errors as $error) {
-            MessageUtility::setErrorMessage($error);
+            if ($e->getMessage() !== 'Username exists' && $e->getMessage() !== 'Email exists') {
+                $form_errors['general'] = 'An error occurred during registration. Please try again.';
+            }
         }
     }
 }
 ?>
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Registration Page</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration - KTM Railway System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
     <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: url('image/komuter1.jpg');
-        background-size: cover;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        height: 100vh;
-    }
-
-    .container {
-        background-color: rgba(255, 255, 255, 0.9); 
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        width: 90%;
-        max-width: 400px;
-        text-align: center;
-        justify-self: center;    
-        align-self: center;
-    }
-
-    .error-message {
-        color: #dc3545;
-        margin-bottom: 15px;
-        text-align: left;
-        padding: 10px;
-        background-color: #ffe6e6;
-        border-radius: 4px;
-    }
-
-    .password-requirements {
-        text-align: left;
-        margin: 10px 0;
-        font-size: 0.9em;
-        color: #666;
-    }
-
-    h2.center {
-        text-align: center;
-        color: #333333;
-    }
-
-    label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: bold;
-        color: #333333;
-    }
-
-    input[type="text"],
-    input[type="email"],
-    input[type="password"],
-    input[type="tel"] {
-        width: calc(100% - 20px);
-        padding: 10px;
-        margin-bottom: 20px;
-        border: 1px solid #cccccc; 
-        border-radius: 5px;
-    }
-
-    input[type="submit"] {
-        background-color: #007bff; 
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        width: 100%;
-    }
-
-    input[type="submit"]:hover {
-        background-color: #0056b3;
-    }
+        body {
+            background-color: #f8f9fa;
+            min-height: 100vh;
+        }
+        .registration-container {
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .form-title {
+            text-align: center;
+            color: #0056b3;
+            margin-bottom: 30px;
+        }
+        .form-floating {
+            margin-bottom: 20px;
+        }
+        .form-control:focus {
+            border-color: #0056b3;
+            box-shadow: 0 0 0 0.2rem rgba(0,86,179,0.25);
+        }
+        .invalid-feedback {
+            display: block;
+            font-size: 0.875em;
+        }
+        .password-requirements {
+            font-size: 0.875em;
+            color: #6c757d;
+            margin-top: 5px;
+            padding-left: 0;
+            list-style: none;
+        }
+        .password-requirements li {
+            margin-bottom: 3px;
+        }
+        .password-requirements li i {
+            margin-right: 5px;
+        }
+        .password-requirements li.valid {
+            color: #198754;
+        }
+        .password-requirements li.invalid {
+            color: #dc3545;
+        }
+        .btn-register {
+            background-color: #0056b3;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            width: 100%;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+        }
+        .btn-register:hover {
+            background-color: #004494;
+            transform: translateY(-2px);
+        }
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            color: #6c757d;
+        }
+        .login-link a {
+            color: #0056b3;
+            text-decoration: none;
+        }
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+        .input-group-text {
+            cursor: pointer;
+            user-select: none;
+        }
     </style>
-    <script>
-    function validateForm() {
-        var username = document.getElementById('username').value.trim();
-        var email = document.getElementById('email').value.trim();
-        var phone = document.getElementById('no_phone').value.trim();
-        var password = document.getElementById('password').value;
-        var confirmPassword = document.getElementById('confirm_password').value;
-        
-        // Username validation
-        if (!/^[a-zA-Z0-9_]{4,20}$/.test(username)) {
-            alert('Username must be 4-20 characters and can only contain letters, numbers, and underscores');
-            return false;
-        }
-        
-        // Email validation
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            alert('Please enter a valid email address');
-            return false;
-        }
-        
-        // Phone validation
-        if (!/^[0-9]{10,15}$/.test(phone)) {
-            alert('Please enter a valid phone number (10-15 digits)');
-            return false;
-        }
-        
-        // Password validation
-        if (password.length < 8) {
-            alert('Password must be at least 8 characters long');
-            return false;
-        }
-        
-        if (!/[A-Z]/.test(password)) {
-            alert('Password must contain at least one uppercase letter');
-            return false;
-        }
-        
-        if (!/[a-z]/.test(password)) {
-            alert('Password must contain at least one lowercase letter');
-            return false;
-        }
-        
-        if (!/[0-9]/.test(password)) {
-            alert('Password must contain at least one number');
-            return false;
-        }
-        
-        if (!/[^A-Za-z0-9]/.test(password)) {
-            alert('Password must contain at least one special character');
-            return false;
-        }
-        
-        if (password !== confirmPassword) {
-            alert('Passwords do not match');
-            return false;
-        }
-        
-        return true;
-    }
-    </script>
 </head>
 <body>
-    <?php include 'Head_and_Foot\header.php'; ?>
+    <?php include 'Head_and_Foot/header.php'; ?>
+    
     <div class="container">
-        <h2 class="center">Registration Form</h2>
-        <?php echo MessageUtility::displayMessages(); ?>
-        
-        <form action="register.php" method="post" onsubmit="return validateForm()">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" 
-                   pattern="[a-zA-Z0-9_]{4,20}" 
-                   title="4-20 characters, letters, numbers and underscore only" 
-                   value="<?php echo isset($username) ? htmlspecialchars($username) : ''; ?>" 
-                   required>
+        <div class="registration-container">
+            <h2 class="form-title">Create Account</h2>
             
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" 
-                   value="<?php echo isset($email) ? htmlspecialchars($email) : ''; ?>" 
-                   required>
-            
-            <label for="no_phone">Phone Number:</label>
-            <input type="tel" id="no_phone" name="no_phone" 
-                   pattern="[0-9]{10,15}" 
-                   title="Phone number (10-15 digits)" 
-                   value="<?php echo isset($phone) ? htmlspecialchars($phone) : ''; ?>" 
-                   required>
-            
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" required>
-            
-            <label for="confirm_password">Confirm Password:</label>
-            <input type="password" id="confirm_password" name="confirm_password" required>
-            
-            <div class="password-requirements">
-                Password must contain:
-                <ul>
-                    <li>At least 8 characters</li>
-                    <li>At least one uppercase letter</li>
-                    <li>At least one lowercase letter</li>
-                    <li>At least one number</li>
-                    <li>At least one special character</li>
+            <?php if (isset($form_errors['general'])): ?>
+                <div class="alert alert-danger">
+                    <?php echo htmlspecialchars($form_errors['general']); ?>
+                </div>
+            <?php endif; ?>
+
+            <form id="registrationForm" method="POST" action="register.php" novalidate>
+                <div class="form-floating">
+                    <input type="text" class="form-control <?php echo isset($form_errors['username']) ? 'is-invalid' : ''; ?>"
+                           id="username" name="username" placeholder="Username"
+                           value="<?php echo htmlspecialchars($form_data['username']); ?>"
+                           required pattern="^[a-zA-Z0-9_]{4,20}$">
+                    <label for="username">Username</label>
+                    <?php if (isset($form_errors['username'])): ?>
+                        <div class="invalid-feedback">
+                            <?php echo htmlspecialchars($form_errors['username']); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="form-floating">
+                    <input type="email" class="form-control <?php echo isset($form_errors['email']) ? 'is-invalid' : ''; ?>"
+                           id="email" name="email" placeholder="Email"
+                           value="<?php echo htmlspecialchars($form_data['email']); ?>"
+                           required>
+                    <label for="email">Email address</label>
+                    <?php if (isset($form_errors['email'])): ?>
+                        <div class="invalid-feedback">
+                            <?php echo htmlspecialchars($form_errors['email']); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="form-floating">
+                    <input type="tel" class="form-control <?php echo isset($form_errors['phone']) ? 'is-invalid' : ''; ?>"
+                           id="no_phone" name="no_phone" placeholder="Phone number"
+                           value="<?php echo htmlspecialchars($form_data['no_phone']); ?>"
+                           required pattern="[0-9]{10,15}">
+                    <label for="no_phone">Phone number</label>
+                    <?php if (isset($form_errors['phone'])): ?>
+                        <div class="invalid-feedback">
+                            <?php echo htmlspecialchars($form_errors['phone']); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="form-floating">
+                    <input type="password" class="form-control <?php echo isset($form_errors['password']) ? 'is-invalid' : ''; ?>"
+                           id="password" name="password" placeholder="Password" required>
+                    <label for="password">Password</label>
+                    <?php if (isset($form_errors['password'])): ?>
+                        <div class="invalid-feedback">
+                            <?php echo htmlspecialchars($form_errors['password']); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <ul class="password-requirements" id="passwordRequirements">
+                    <li id="length"><i class="bx bx-x"></i> At least 8 characters long</li>
+                    <li id="uppercase"><i class="bx bx-x"></i> Contains uppercase letter</li>
+                    <li id="lowercase"><i class="bx bx-x"></i> Contains lowercase letter</li>
+                    <li id="number"><i class="bx bx-x"></i> Contains number</li>
+                    <li id="special"><i class="bx bx-x"></i> Contains special character</li>
                 </ul>
-            </div>
-            
-            <input type="submit" value="Register">
-        </form>
-        
-        <div class="login-link" style="text-align: center; margin-top: 15px;">
-            <p>Already have an account? <a href="login.php">Login here</a></p>
+
+                <div class="form-floating">
+                    <input type="password" class="form-control <?php echo isset($form_errors['confirm_password']) ? 'is-invalid' : ''; ?>"
+                           id="confirm_password" name="confirm_password" placeholder="Confirm Password" required>
+                    <label for="confirm_password">Confirm Password</label>
+                    <?php if (isset($form_errors['confirm_password'])): ?>
+                        <div class="invalid-feedback">
+                            <?php echo htmlspecialchars($form_errors['confirm_password']); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <button type="submit" class="btn btn-register">
+                    <i class="bx bx-user-plus"></i> Create Account
+                </button>
+
+                <div class="login-link">
+                    Already have an account? <a href="login.php">Login here</a>
+                </div>
+            </form>
         </div>
     </div>
-    <?php include 'Head_and_Foot\footer.php'; ?>
+    
+    <?php include 'Head_and_Foot/footer.php'; ?>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const password = document.getElementById('password');
+            const confirmPassword = document.getElementById('confirm_password');
+            const requirements = {
+                length: document.getElementById('length'),
+                uppercase: document.getElementById('uppercase'),
+                lowercase: document.getElementById('lowercase'),
+                number: document.getElementById('number'),
+                special: document.getElementById('special')
+            };
+
+            function updateRequirement(element, valid) {
+                const icon = element.querySelector('i');
+                icon.className = valid ? 'bx bx-check' : 'bx bx-x';
+                element.className = valid ? 'valid' : 'invalid';
+            }
+
+            function validatePassword() {
+                const value = password.value;
+                
+                updateRequirement(requirements.length, value.length >= 8);
+                updateRequirement(requirements.uppercase, /[A-Z]/.test(value));
+                updateRequirement(requirements.lowercase, /[a-z]/.test(value));
+                updateRequirement(requirements.number, /[0-9]/.test(value));
+                updateRequirement(requirements.special, /[^A-Za-z0-9]/.test(value));
+            }
+
+            function validateConfirmPassword() {
+                if (confirmPassword.value === password.value) {
+                    confirmPassword.setCustomValidity('');
+                } else {
+                    confirmPassword.setCustomValidity('Passwords do not match');
+                }
+            }
+
+            password.addEventListener('input', validatePassword);
+            password.addEventListener('input', validateConfirmPassword);
+            confirmPassword.addEventListener('input', validateConfirmPassword);
+
+            // Phone number validation
+            const phoneInput = document.getElementById('no_phone');
+            phoneInput.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+                if (this.value.length > 15) {
+                    this.value = this.value.slice(0, 15);
+                }
+            });
+
+            // Username validation
+            const usernameInput = document.getElementById('username');
+            usernameInput.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^a-zA-Z0-9_]/g, '');
+                if (this.value.length > 20) {
+                    this.value = this.value.slice(0, 20);
+                }
+            });
+        });
+    </script>
 </body>
 </html>
