@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once 'config/database.php';
+require_once 'includes/TokenManager.php';
+require_once 'includes/NotificationManager.php';
 
 // Check if user is logged in and has pending tickets
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['ticket_ids']) || !isset($_SESSION['total_price'])) {
@@ -67,6 +69,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_method'])) {
         $update_stmt->bind_param("i", $ticket_id);
         if (!$update_stmt->execute()) {
             throw new Exception("Failed to update ticket status.");
+        }
+
+        // Get schedule details for QR code and notification
+        $schedule_sql = "SELECT s.* FROM tickets t 
+                        JOIN schedules s ON t.schedule_id = s.schedule_id 
+                        WHERE t.ticket_id = ?";
+        $schedule_stmt = $conn->prepare($schedule_sql);
+        $schedule_stmt->bind_param("i", $ticket_id);
+        $schedule_stmt->execute();
+        $schedule_data = $schedule_stmt->get_result()->fetch_assoc();
+
+        // Get ticket details
+        $ticket_sql = "SELECT * FROM tickets WHERE ticket_id = ?";
+        $ticket_stmt = $conn->prepare($ticket_sql);
+        $ticket_stmt->bind_param("i", $ticket_id);
+        $ticket_stmt->execute();
+        $ticket_data = $ticket_stmt->get_result()->fetch_assoc();
+
+        // Create QR code token
+        $tokenManager = new TokenManager($conn);
+        $token = $tokenManager->generateSecureToken($ticket_id, $user_id);
+
+        // Create QR code data
+        $qrData = array(
+            'token' => $token,
+            'Ticket ID' => $ticket_id,
+            'Train' => $schedule_data['train_number'],
+            'From' => $schedule_data['departure_station'],
+            'To' => $schedule_data['arrival_station'],
+            'Departure' => date('d M Y, h:i A', strtotime($schedule_data['departure_time'])),
+            'Arrival' => date('d M Y, h:i A', strtotime($schedule_data['arrival_time'])),
+            'Seat' => $ticket_data['seat_number'],
+            'Status' => 'active'
+        );
+
+        // Convert to JSON and store
+        $qr_code = json_encode($qrData);
+
+        // Update the QR code
+        $update_qr_sql = "UPDATE tickets SET qr_code = ? WHERE ticket_id = ?";
+        $update_qr_stmt = $conn->prepare($update_qr_sql);
+        $update_qr_stmt->bind_param("si", $qr_code, $ticket_id);
+        $update_qr_stmt->execute();
+
+        // Send notification
+        $notificationManager = new NotificationManager($conn);
+        
+        // Create detailed message
+        $message = "Booking Confirmation\n\n";
+        $message .= "Ticket Details:\n";
+        $message .= "Train: " . $schedule_data['train_number'] . "\n";
+        $message .= "From: " . $schedule_data['departure_station'] . "\n";
+        $message .= "To: " . $schedule_data['arrival_station'] . "\n";
+        $message .= "Departure: " . date('d M Y, h:i A', strtotime($schedule_data['departure_time'])) . "\n";
+        $message .= "Passenger: " . $ticket_data['passenger_name'] . "\n";
+        $message .= "Quantity: " . $ticket_data['num_seats'] . " ticket(s)\n";
+        $message .= "Total Price: RM " . number_format($total_price, 2) . "\n";
+        $message .= "Payment Method: " . ucfirst($payment_method) . "\n";
+        $message .= "Transaction ID: " . $transaction_id . "\n\n";
+        $message .= "Your e-ticket has been attached to this email. You can also view it in your purchase history.";
+        
+        // Send booking confirmation notification
+        $notificationManager->sendTicketStatusNotification(
+            $ticket_id,
+            'booked',
+            $message
+        );
+
+        // Update available seats
+        $update_seats_sql = "UPDATE schedules 
+                            SET available_seats = available_seats - ? 
+                            WHERE schedule_id = ?";
+        $update_seats_stmt = $conn->prepare($update_seats_sql);
+        $update_seats_stmt->bind_param("ii", $ticket_data['num_seats'], $schedule_data['schedule_id']);
+        if (!$update_seats_stmt->execute()) {
+            throw new Exception("Failed to update seat availability.");
         }
         
         // Log the payment

@@ -2,6 +2,7 @@
 session_start();
 require_once 'config/database.php';
 require_once 'includes/TokenManager.php';
+require_once 'includes/NotificationManager.php';
 
 if (!isset($_SESSION['user_id']) || !isset($_POST['schedule_id']) || !isset($_POST['ticket_quantity']) || !isset($_POST['price'])) {
     header("Location: ticketing.php");
@@ -79,76 +80,27 @@ try {
 
     // Insert single ticket for multiple seats (with temporary QR code)
     $insert_sql = "INSERT INTO tickets (user_id, schedule_id, seat_number, num_seats, passenger_name, status, booking_date, payment_amount, qr_code, payment_status) 
-                   VALUES (?, ?, ?, ?, ?, 'active', NOW(), ?, 'temp', 'paid')";
+                   VALUES (?, ?, ?, ?, ?, 'pending', NOW(), ?, 'temp', 'pending')";
     $total_amount = $price * $ticket_quantity;
     $insert_stmt = $conn->prepare($insert_sql);
     $insert_stmt->bind_param("issisi", $user_id, $schedule_id, $seat_range, $ticket_quantity, $passenger_name, $total_amount);
     
-    if (!$insert_stmt->execute()) {
+    if ($insert_stmt->execute()) {
+        $ticket_id = $conn->insert_id;
+        
+        // Store booking information in session for payment
+        $_SESSION['ticket_ids'] = [$ticket_id];
+        $_SESSION['total_price'] = $total_amount;
+        $_SESSION['ticket_quantity'] = $ticket_quantity;
+        
+        $conn->commit();
+        
+        // Redirect to payment page
+        header("Location: payment.php");
+        exit();
+    } else {
         throw new Exception("Failed to create ticket.");
     }
-    $ticket_id = $conn->insert_id;
-
-    // Initialize TokenManager
-    $tokenManager = new TokenManager($conn);
-    $token = $tokenManager->generateSecureToken($ticket_id, $user_id);
-
-    // Create QR code data
-    $qrData = array(
-        'token' => $token,
-        'Ticket ID' => $ticket_id,
-        'Train' => $schedule_data['train_number'],
-        'From' => $schedule_data['departure_station'],
-        'To' => $schedule_data['arrival_station'],
-        'Departure' => date('d M Y, h:i A', strtotime($schedule_data['departure_time'])),
-        'Arrival' => date('d M Y, h:i A', strtotime($schedule_data['arrival_time'])),
-        'Seat' => $seat_range,
-        'Status' => 'active'
-    );
-
-    // Convert to JSON and store
-    $qr_code = json_encode($qrData);
-
-    // Update the QR code
-    $update_qr_sql = "UPDATE tickets SET qr_code = ? WHERE ticket_id = ?";
-    $update_qr_stmt = $conn->prepare($update_qr_sql);
-    $update_qr_stmt->bind_param("si", $qr_code, $ticket_id);
-    $update_qr_stmt->execute();
-
-    // Update available seats with a final check
-    $update_sql = "UPDATE schedules 
-                   SET available_seats = available_seats - ? 
-                   WHERE schedule_id = ? 
-                   AND departure_time > ? 
-                   AND available_seats >= ?";
-    
-    $update_stmt = $conn->prepare($update_sql);
-    $update_stmt->bind_param("iiis", $ticket_quantity, $schedule_id, $buffer_time, $ticket_quantity);
-    
-    if (!$update_stmt->execute() || $update_stmt->affected_rows === 0) {
-        throw new Exception("Failed to update seat availability or train has departed.");
-    }
-
-    // Create payment record
-    $transaction_id = uniqid('PAY_', true);
-    $payment_method = 'direct'; // Default payment method
-    $payment_sql = "INSERT INTO payments (ticket_id, payment_method, amount, payment_date, status, transaction_id) 
-                    VALUES (?, ?, ?, NOW(), 'completed', ?)";
-    $payment_stmt = $conn->prepare($payment_sql);
-    $payment_stmt->bind_param("isds", $ticket_id, $payment_method, $total_amount, $transaction_id);
-    $payment_stmt->execute();
-
-    $conn->commit();
-    
-    // Store booking information in session
-    $_SESSION['ticket_ids'] = [$ticket_id];
-    $_SESSION['total_price'] = $total_amount;
-    $_SESSION['ticket_quantity'] = $ticket_quantity;
-    
-    // Redirect to payment success page directly
-    header("Location: payment_success.php?transaction_id=" . urlencode($transaction_id));
-    exit();
-
 } catch (Exception $e) {
     $conn->rollback();
     $_SESSION['error_message'] = $e->getMessage();

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
+require_once 'includes/NotificationManager.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -51,44 +52,49 @@ if (isset($_GET['ticket_id'])) {
             $update_ticket = $conn->prepare("UPDATE tickets SET status = 'cancelled', payment_status = 'refunded' WHERE ticket_id = ?");
             $update_ticket->bind_param("i", $ticket_id);
             
-            if (!$update_ticket->execute()) {
+            if ($update_ticket->execute()) {
+                // Calculate refund amount (100% refund if more than 24 hours before departure)
+                $refund_amount = $ticket['paid_amount'];
+                
+                // Create refund record
+                $refund_sql = "INSERT INTO refunds (ticket_id, amount, refund_date, status) VALUES (?, ?, NOW(), 'processed')";
+                $refund_stmt = $conn->prepare($refund_sql);
+                $refund_stmt->bind_param("id", $ticket_id, $refund_amount);
+                $refund_stmt->execute();
+                
+                // Update available seats
+                $update_seats = $conn->prepare("UPDATE schedules SET available_seats = available_seats + ? WHERE schedule_id = ?");
+                $update_seats->bind_param("ii", $ticket['num_seats'], $ticket['schedule_id']);
+                $update_seats->execute();
+                
+                // Send cancellation notification
+                $notificationManager = new NotificationManager($conn);
+                
+                // Create detailed message
+                $message = "Ticket Cancellation Confirmation\n\n";
+                $message .= "Your ticket has been successfully cancelled:\n\n";
+                $message .= "Ticket Details:\n";
+                $message .= "Train: " . $ticket['train_number'] . "\n";
+                $message .= "From: " . $ticket['departure_station'] . "\n";
+                $message .= "To: " . $ticket['arrival_station'] . "\n";
+                $message .= "Departure: " . date('d M Y, h:i A', strtotime($ticket['departure_time'])) . "\n";
+                $message .= "Refund Amount: RM " . number_format($refund_amount, 2) . "\n\n";
+                $message .= "Your refund will be processed within 3-5 business days.";
+                
+                // Send cancellation notification
+                $notificationManager->sendTicketStatusNotification(
+                    $ticket_id,
+                    'cancelled',
+                    $message
+                );
+                
+                $conn->commit();
+                $_SESSION['success_message'] = "Ticket cancelled successfully. Refund will be processed within 3-5 business days.";
+                header("Location: history.php");
+                exit();
+            } else {
                 throw new Exception("Error cancelling ticket");
             }
-
-            // Create refund record
-            $refund_sql = "INSERT INTO refunds (ticket_id, amount, refund_date, status, reason) 
-                          VALUES (?, ?, NOW(), 'pending', ?)";
-            $refund_stmt = $conn->prepare($refund_sql);
-            $refund_amount = $ticket['paid_amount']; // Full refund amount
-            $cancellation_reason = $_POST['cancellation_reason'];
-            $refund_stmt->bind_param("ids", $ticket_id, $refund_amount, $cancellation_reason);
-            
-            if (!$refund_stmt->execute()) {
-                throw new Exception("Error creating refund record");
-            }
-
-            // Increase available seats
-            $update_seats = $conn->prepare("UPDATE schedules SET available_seats = available_seats + 1 WHERE schedule_id = ?");
-            $update_seats->bind_param("i", $ticket['schedule_id']);
-            
-            if (!$update_seats->execute()) {
-                throw new Exception("Error updating seat availability");
-            }
-
-            // Log the cancellation
-            $log_sql = "INSERT INTO activity_logs (user_id, action, description) 
-                       VALUES (?, 'ticket_cancelled', ?)";
-            $description = "Ticket cancelled for Train " . $ticket['train_number'] . 
-                          " (" . $ticket['departure_station'] . " to " . $ticket['arrival_station'] . 
-                          "). Reason: " . $cancellation_reason;
-            $log_stmt = $conn->prepare($log_sql);
-            $log_stmt->bind_param("is", $user_id, $description);
-            $log_stmt->execute();
-
-            $conn->commit();
-            $_SESSION['success_message'] = "Ticket cancelled successfully. Your refund request has been submitted and will be processed within 7 working days. Please visit any KTM station with your booking confirmation and valid ID to collect your refund.";
-            header("Location: history.php");
-            exit();
         }
     } catch (Exception $e) {
         $conn->rollback();

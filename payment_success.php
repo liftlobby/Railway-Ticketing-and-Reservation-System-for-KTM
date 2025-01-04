@@ -77,6 +77,7 @@ try {
             background: #f8f9fa;
             border-radius: 8px;
             text-align: left;
+            border: 1px solid #dee2e6;
         }
         .tickets-container {
             margin: 30px 0;
@@ -99,59 +100,76 @@ try {
         .ticket-details {
             flex: 1;
         }
-        .ticket-details h3 {
-            color: #0056b3;
-            margin-bottom: 15px;
-        }
-        .ticket-details p {
-            margin: 8px 0;
-            color: #555;
-        }
         .qr-code-container {
             text-align: center;
             padding: 10px;
             background: white;
             border-radius: 8px;
+            border: 1px solid #dee2e6;
         }
         .qr-code {
-            width: 120px;
-            height: 120px;
-            margin-bottom: 5px;
+            width: 150px;
+            height: 150px;
+            margin-bottom: 10px;
         }
         .total-amount {
             font-size: 1.5em;
-            color: #0056b3;
-            margin: 20px 0;
-            padding: 15px;
+            font-weight: bold;
+            margin: 30px 0;
+            padding: 20px;
             background: #f8f9fa;
             border-radius: 8px;
+            border: 1px solid #dee2e6;
         }
         .payment-info {
             margin: 20px 0;
-            padding: 15px;
-            color: #666;
+            padding: 20px;
+            background: #e9ecef;
+            border-radius: 8px;
+            font-size: 0.9em;
+            color: #495057;
         }
         .btn-group {
+            margin-top: 30px;
             display: flex;
             gap: 15px;
             justify-content: center;
-            margin-top: 30px;
         }
         .btn {
-            padding: 12px 25px;
-            border: none;
+            display: inline-block;
+            padding: 10px 20px;
             border-radius: 5px;
-            cursor: pointer;
             text-decoration: none;
-            transition: background-color 0.3s;
-            font-weight: 500;
+            font-weight: bold;
+            transition: all 0.3s ease;
         }
         .btn-primary {
             background-color: #0056b3;
             color: white;
+            border: none;
         }
         .btn-primary:hover {
             background-color: #003d82;
+            transform: translateY(-2px);
+        }
+        h1 {
+            color: #28a745;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #0056b3;
+            margin: 20px 0;
+        }
+        h3 {
+            color: #0056b3;
+            margin: 0 0 15px 0;
+        }
+        .ticket-details p {
+            margin: 8px 0;
+            color: #495057;
+        }
+        .ticket-details strong {
+            color: #212529;
         }
     </style>
 </head>
@@ -169,6 +187,7 @@ try {
             <p><strong>Transaction ID:</strong> <?php echo htmlspecialchars($transaction_id); ?></p>
             <p><strong>Payment Method:</strong> <?php echo ucwords(str_replace('_', ' ', $tickets[0]['payment_method'])); ?></p>
             <p><strong>Date:</strong> <?php echo date('d M Y, h:i A'); ?></p>
+            <p><strong>Status:</strong> <span style="color: #28a745;">Confirmed</span></p>
         </div>
 
         <div class="tickets-container">

@@ -292,4 +292,46 @@ CREATE TABLE `reports` (
     INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notifications`
+--
+
+CREATE TABLE IF NOT EXISTS `notifications` (
+    `notification_id` INT PRIMARY KEY AUTO_INCREMENT,
+    `user_id` INT,
+    `type` VARCHAR(50) NOT NULL,
+    `message` TEXT NOT NULL,
+    `related_id` INT,
+    `created_at` DATETIME NOT NULL,
+    `is_read` TINYINT(1) DEFAULT 0,
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE,
+    INDEX `idx_user_unread` (`user_id`, `is_read`),
+    INDEX `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notification_settings`
+--
+
+CREATE TABLE IF NOT EXISTS `notification_settings` (
+    `user_id` INT PRIMARY KEY,
+    `email_notifications` TINYINT(1) DEFAULT 1,
+    `sms_notifications` TINYINT(1) DEFAULT 1,
+    `push_notifications` TINYINT(1) DEFAULT 1,
+    FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+
+--
+-- Insert default notification settings for existing users
+--
+
+INSERT IGNORE INTO `notification_settings` (`user_id`, `email_notifications`, `sms_notifications`, `push_notifications`)
+SELECT `user_id`, 1, 1, 1 FROM `users`;
+
 COMMIT;
