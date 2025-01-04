@@ -25,6 +25,7 @@ CREATE TABLE `users` (
   `email` varchar(50) NOT NULL,
   `no_phone` varchar(20) NOT NULL,
   `password` varchar(255) NOT NULL,
+  `profile_picture` varchar(255) DEFAULT NULL,
   `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
   `last_login` timestamp NULL,
   `last_password_change` timestamp NULL,
