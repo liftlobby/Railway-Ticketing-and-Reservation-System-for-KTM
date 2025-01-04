@@ -3,6 +3,11 @@ if (!isset($_SESSION['staff_id']) || !isset($_SESSION['staff_username'])) {
     header("Location: login.php");
     exit();
 }
+
+// Get unread notifications count for staff
+require_once '../includes/NotificationManager.php';
+$notificationManager = new NotificationManager($conn);
+$unread_count = $notificationManager->getUnreadNotificationCount($_SESSION['staff_id'], 'staff');
 ?>
 
 <nav class="navbar">
@@ -31,6 +36,17 @@ if (!isset($_SESSION['staff_id']) || !isset($_SESSION['staff_username'])) {
             <i class="fas fa-user-shield"></i> Staff
         </a>
         <?php endif; ?>
+        
+        <!-- Notifications -->
+        <a href="notifications.php" class="navbar-item position-relative">
+            <i class="fas fa-bell"></i>
+            <?php if ($unread_count > 0): ?>
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                <?php echo $unread_count; ?>
+            </span>
+            <?php endif; ?>
+        </a>
+        
         <a href="logout.php" class="navbar-item">
             <i class="fas fa-sign-out-alt"></i> Logout
         </a>
@@ -95,6 +111,37 @@ if (!isset($_SESSION['staff_id']) || !isset($_SESSION['staff_username'])) {
 
 .navbar-item i {
     font-size: 1.1rem;
+}
+
+.position-relative {
+    position: relative;
+}
+
+.position-absolute {
+    position: absolute;
+}
+
+.badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.top-0 {
+    top: 0;
+}
+
+.start-100 {
+    left: 100%;
+}
+
+.translate-middle {
+    transform: translate(-50%, -50%);
+}
+
+.bg-danger {
+    background-color: #dc3545;
 }
 
 @media (max-width: 768px) {
