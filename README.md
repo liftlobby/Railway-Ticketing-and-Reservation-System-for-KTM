@@ -77,7 +77,7 @@ A comprehensive railway ticket booking and management system for KTM (Keretapi T
 6. Download/print ticket with QR code
 
 ### Staff Portal
-1. Access the staff portal through `http://localhost/KTM/staff/`
+1. Access the staff portal through `http://localhost/KTM/staff/` or click the `staff login` in the main page footer
 2. Login with staff credentials
 3. Use QR scanner or manual entry to verify tickets
 4. View and manage train schedules
