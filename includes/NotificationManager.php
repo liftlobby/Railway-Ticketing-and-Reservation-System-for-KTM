@@ -320,8 +320,7 @@ class NotificationManager {
     }
 
     private function sendSMS($phoneNumber, $message) {
-        // Implement SMS sending logic here
-        // You can integrate with services like Twilio, Nexmo, etc.
+        // Further exploration
         return true;
     }
 

@@ -52,73 +52,7 @@ $display_message = !empty($error_message) ? $error_message : $error_details['mes
     <title>Error <?php echo $error_code; ?> - KTM Help Center</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .error-container {
-            text-align: center;
-            max-width: 600px;
-            padding: 40px 20px;
-        }
-        .error-icon {
-            font-size: 80px;
-            color: #dc3545;
-            margin-bottom: 20px;
-        }
-        .error-code {
-            font-size: 72px;
-            font-weight: bold;
-            color: #343a40;
-            margin-bottom: 10px;
-            line-height: 1;
-        }
-        .error-title {
-            font-size: 24px;
-            color: #495057;
-            margin-bottom: 20px;
-        }
-        .error-message {
-            color: #6c757d;
-            margin-bottom: 30px;
-        }
-        .back-button {
-            background-color: #0056b3;
-            color: white;
-            padding: 12px 30px;
-            border-radius: 25px;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .back-button:hover {
-            background-color: #004494;
-            color: white;
-            transform: translateY(-2px);
-        }
-        .error-image {
-            max-width: 300px;
-            margin-bottom: 30px;
-        }
-        @media (max-width: 576px) {
-            .error-code {
-                font-size: 48px;
-            }
-            .error-title {
-                font-size: 20px;
-            }
-            .error-icon {
-                font-size: 60px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="style/style_error.css">
 </head>
 <body>
     <?php include 'Head_and_Foot\header.php'; ?>
