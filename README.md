@@ -1,6 +1,6 @@
 # KTM Railway System
 
-A comprehensive railway ticket booking and management system for KTM (Keretapi Tanah Melayu).
+A railway ticket booking and management system for KTM (Keretapi Tanah Melayu).
 
 ## Features
 
@@ -84,19 +84,12 @@ A comprehensive railway ticket booking and management system for KTM (Keretapi T
 
 ## Security Features
 - Session management
-- Password encryption with Argon2id
 - Password hashing with Argon2id, salting (Unique Salt) and peppering (KTM_SECURE_2024)
 - Input validation
 - SQL injection prevention
 - XSS protection
 - CSRF protection
 - QR code authentication with PHP QR Code and special tokens generated with SHA-256
-
-## Error Handling
-- Comprehensive error logging
-- User-friendly error messages
-- Transaction rollback for failed operations
-- Proper exception handling
 
 ## License
 This project is proprietary software. All rights reserved.
