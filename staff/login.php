@@ -59,13 +59,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['staff_username'] = $staff['username'];
                     $_SESSION['staff_role'] = $staff['role']; 
                     
-                    // Log successful login
-                    $log_sql = "INSERT INTO staff_login_logs (staff_id, action, ip_address) VALUES (?, 'login', ?)";
-                    $log_stmt = $conn->prepare($log_sql);
-                    $ip = $_SERVER['REMOTE_ADDR'];
-                    $log_stmt->bind_param("is", $staff['staff_id'], $ip);
-                    $log_stmt->execute();
-                    
                     $conn->commit();
                     header("Location: dashboard.php");
                     exit();
