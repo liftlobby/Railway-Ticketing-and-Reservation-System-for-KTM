@@ -151,7 +151,7 @@ $late_tickets_result = $late_tickets_stmt->get_result();
     <title>Ticket Cancellation - KTM Railway System</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="style/style_ticket_cancellation.css">
+    <link rel="stylesheet" href="style/style_ticketcancellation.css">
 </head>
 <body>
     <?php require_once 'Head_and_Foot/header.php'; ?>
