@@ -33,10 +33,11 @@ class TokenManager {
         // First, clean up expired tokens
         $this->cleanupExpiredTokens();
 
-        // Get token data
-        $sql = "SELECT t.*, tk.user_id, tk.status as ticket_status
+        // Get token data and schedule information
+        $sql = "SELECT at.*, tk.user_id, tk.status as ticket_status, s.departure_time 
                 FROM auth_tokens at
                 JOIN tickets tk ON at.ticket_id = tk.ticket_id
+                JOIN schedules s ON tk.schedule_id = s.schedule_id
                 WHERE at.token = ? 
                 AND at.expiry_time > NOW() 
                 AND at.is_used = 0";
@@ -61,6 +62,28 @@ class TokenManager {
         // Check ticket status
         if ($tokenData['ticket_status'] !== 'active') {
             return false;
+        }
+
+        // Get current time and departure time
+        $currentTime = new DateTime();
+        $departureTime = new DateTime($tokenData['departure_time']);
+        
+        // Calculate time difference in minutes
+        $timeDiff = $currentTime->diff($departureTime);
+        $minutesDiff = ($timeDiff->days * 24 * 60) + ($timeDiff->h * 60) + $timeDiff->i;
+        
+        // Check if it's too early (more than 30 minutes before departure)
+        if ($currentTime < $departureTime && $minutesDiff > 30) {
+            throw new Exception("This ticket cannot be used yet. Departure time is " . 
+                $departureTime->format('d M Y, h:i A') . 
+                ". You can check in starting 30 minutes before departure.");
+        }
+        
+        // Check if it's too late (more than 30 minutes after departure)
+        if ($currentTime > $departureTime && $minutesDiff > 30) {
+            throw new Exception("This ticket has expired. Departure time was " . 
+                $departureTime->format('d M Y, h:i A') . 
+                ". Tickets are valid until 30 minutes after departure.");
         }
 
         // Mark token as used

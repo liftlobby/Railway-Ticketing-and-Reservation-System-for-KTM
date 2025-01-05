@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ticket_id'])) {
 
         // Get current time and departure time
         $departure_time = new DateTime($ticket_data['departure_time']);
-        $current_time = new DateTime('2025-01-03 23:18:16');
+        $current_time = new DateTime(); // Use current time
         
         // Calculate time difference in minutes
         $time_difference = $current_time->diff($departure_time);
@@ -205,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Validate time window
         $departure_time = new DateTime($ticket_data['departure_time']);
-        $current_time = new DateTime('2025-01-03 23:18:16');
+        $current_time = new DateTime(); // Use current time
         
         // Calculate time difference in minutes
         $time_difference = $current_time->diff($departure_time);
@@ -221,11 +221,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $late_window = 30;  // 30 minutes
 
         if ($minutes_difference > $early_window) {
-            throw new Exception('Too early to use this ticket');
+            throw new Exception("This ticket cannot be used yet. Scanning will be available 2 hours before departure (" . 
+                $departure_time->format('d M Y, h:i A') . ")");
         }
 
         if ($minutes_difference < -$late_window) {
-            throw new Exception('Ticket has expired');
+            throw new Exception("This ticket has expired. It was only valid until 30 minutes after departure (" . 
+                $departure_time->format('d M Y, h:i A') . ")");
         }
 
         // Update ticket status

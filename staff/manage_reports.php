@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/database.php';
 require_once '../includes/MessageUtility.php';
+require_once '../includes/NotificationManager.php';
 
 // Check if staff is logged in
 if (!isset($_SESSION['staff_id'])) {
@@ -9,7 +10,7 @@ if (!isset($_SESSION['staff_id'])) {
     exit();
 }
 
-// Handle email response submission
+// Handle response submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'respond') {
     try {
         $report_id = $_POST['report_id'];
@@ -27,28 +28,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             throw new Exception("Failed to update report.");
         }
         
-        // Get user's email
+        // Get report details for email
         $stmt = $conn->prepare("SELECT r.email, r.name, r.subject FROM reports r WHERE report_id = ?");
         $stmt->bind_param("i", $report_id);
         $stmt->execute();
         $result = $stmt->get_result();
         $report = $result->fetch_assoc();
         
-        // Send email
-        $to = $report['email'];
-        $subject = "Re: " . $report['subject'];
-        $message = "Dear " . $report['name'] . ",\n\n";
-        $message .= "Thank you for your report. Here is our response:\n\n";
-        $message .= $response . "\n\n";
-        $message .= "Best regards,\nKTM Railway System Staff";
-        $headers = "From: ktm@railway.com";
-        
-        if (mail($to, $subject, $message, $headers)) {
+        // Send email using NotificationManager
+        $notificationManager = new NotificationManager($conn);
+        try {
+            $notificationManager->sendReportResponse($report['email'], $report['name'], $report['subject'], $response);
             $conn->commit();
-            MessageUtility::setSuccessMessage("Response sent successfully!");
-        } else {
-            throw new Exception("Failed to send email.");
+            MessageUtility::setSuccessMessage("Response sent and email notification sent successfully!");
+        } catch (Exception $e) {
+            // If email fails, still save the response but notify staff
+            $conn->commit();
+            MessageUtility::setWarningMessage("Response saved but email notification failed: " . $e->getMessage());
         }
+        
     } catch (Exception $e) {
         $conn->rollback();
         MessageUtility::setErrorMessage($e->getMessage());

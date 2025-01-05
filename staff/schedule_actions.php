@@ -4,11 +4,78 @@ require_once '../config/database.php';
 require_once '../includes/MessageUtility.php';
 require_once '../includes/NotificationManager.php';
 
+// Set timezone
+date_default_timezone_set('Asia/Kuala_Lumpur');
+
 // Check if staff is logged in
 if (!isset($_SESSION['staff_id'])) {
     header("Location: login.php");
     exit();
 }
+
+// Function to cleanup old schedules
+function cleanupOldSchedules($conn) {
+    try {
+        // Start transaction
+        $conn->begin_transaction();
+
+        // Get schedules that departed more than 30 minutes ago
+        $sql = "SELECT schedule_id FROM schedules 
+                WHERE departure_time < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+                AND NOT EXISTS (
+                    SELECT 1 FROM tickets 
+                    WHERE tickets.schedule_id = schedules.schedule_id 
+                    AND tickets.status = 'active'
+                )";
+                
+        $result = $conn->query($sql);
+        $deletedCount = 0;
+        
+        if ($result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
+                $schedule_id = $row['schedule_id'];
+                
+                // Delete auth_tokens first
+                $stmt = $conn->prepare("
+                    DELETE at FROM auth_tokens at
+                    JOIN tickets t ON at.ticket_id = t.ticket_id
+                    WHERE t.schedule_id = ?
+                ");
+                $stmt->bind_param("i", $schedule_id);
+                $stmt->execute();
+
+                // Delete tickets
+                $stmt = $conn->prepare("DELETE FROM tickets WHERE schedule_id = ?");
+                $stmt->bind_param("i", $schedule_id);
+                $stmt->execute();
+
+                // Delete schedule
+                $stmt = $conn->prepare("DELETE FROM schedules WHERE schedule_id = ?");
+                $stmt->bind_param("i", $schedule_id);
+                $stmt->execute();
+                
+                $deletedCount++;
+            }
+        }
+
+        // Commit transaction
+        $conn->commit();
+        
+        if ($deletedCount > 0) {
+            MessageUtility::setSuccessMessage("Cleaned up $deletedCount completed train schedules.");
+        }
+
+    } catch (Exception $e) {
+        // Rollback transaction on error
+        if ($conn) {
+            $conn->rollback();
+        }
+        MessageUtility::setErrorMessage("Error cleaning up schedules: " . $e->getMessage());
+    }
+}
+
+// Run cleanup before processing any actions
+cleanupOldSchedules($conn);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
@@ -119,25 +186,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'delete':
                 $schedule_id = $_POST['schedule_id'];
+                
+                try {
+                    // Start transaction
+                    $conn->begin_transaction();
 
-                // First check if there are any active tickets for this schedule
-                $stmt = $conn->prepare("SELECT COUNT(*) as ticket_count FROM tickets WHERE schedule_id = ? AND status = 'active'");
-                $stmt->bind_param("i", $schedule_id);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                $row = $result->fetch_assoc();
+                    // First check if there are any active tickets for this schedule
+                    $stmt = $conn->prepare("SELECT COUNT(*) as ticket_count FROM tickets WHERE schedule_id = ? AND status = 'active'");
+                    $stmt->bind_param("i", $schedule_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $row = $result->fetch_assoc();
 
-                if ($row['ticket_count'] > 0) {
-                    MessageUtility::setErrorMessage("Cannot delete schedule: There are active tickets for this schedule.");
-                } else {
+                    if ($row['ticket_count'] > 0) {
+                        throw new Exception("Cannot delete schedule: There are active tickets for this schedule.");
+                    }
+
+                    // Delete auth_tokens first
+                    $stmt = $conn->prepare("
+                        DELETE at FROM auth_tokens at
+                        JOIN tickets t ON at.ticket_id = t.ticket_id
+                        WHERE t.schedule_id = ?
+                    ");
+                    $stmt->bind_param("i", $schedule_id);
+                    $stmt->execute();
+
+                    // Delete tickets
+                    $stmt = $conn->prepare("DELETE FROM tickets WHERE schedule_id = ?");
+                    $stmt->bind_param("i", $schedule_id);
+                    $stmt->execute();
+
+                    // Finally delete the schedule
                     $stmt = $conn->prepare("DELETE FROM schedules WHERE schedule_id = ?");
                     $stmt->bind_param("i", $schedule_id);
+                    $stmt->execute();
 
-                    if ($stmt->execute()) {
-                        MessageUtility::setSuccessMessage("Schedule deleted successfully!");
-                    } else {
-                        MessageUtility::setErrorMessage("Error deleting schedule: " . $conn->error);
-                    }
+                    // Commit transaction
+                    $conn->commit();
+                    MessageUtility::setSuccessMessage("Schedule deleted successfully!");
+
+                } catch (Exception $e) {
+                    // Rollback transaction on error
+                    $conn->rollback();
+                    MessageUtility::setErrorMessage($e->getMessage());
                 }
                 break;
 
@@ -160,3 +251,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 header("Location: manage_schedules.php");
 exit();
+?>

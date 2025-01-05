@@ -8,28 +8,36 @@ try {
     // Get JSON input
     $input = json_decode(file_get_contents('php://input'), true);
     
-    if (!isset($input['token']) || !isset($input['ticket_id'])) {
+    if (!isset($input['token'])) {
         throw new Exception('Missing required parameters');
     }
 
     $token = $input['token'];
-    $ticket_id = $input['ticket_id'];
 
     // Initialize TokenManager
     $tokenManager = new TokenManager($conn);
 
-    // Verify token
-    $isValid = $tokenManager->verifyToken($token, $ticket_id);
-
-    if ($isValid) {
-        echo json_encode([
-            'status' => 'success',
-            'message' => 'QR code verified successfully'
-        ]);
-    } else {
+    try {
+        // Verify token
+        $result = $tokenManager->verifyToken($token);
+        
+        if ($result) {
+            echo json_encode([
+                'status' => 'success',
+                'message' => 'QR code verified successfully',
+                'data' => $result
+            ]);
+        } else {
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Invalid or expired QR code'
+            ]);
+        }
+    } catch (Exception $e) {
+        // Handle specific token verification errors (like timing restrictions)
         echo json_encode([
             'status' => 'error',
-            'message' => 'Invalid or expired QR code'
+            'message' => $e->getMessage()
         ]);
     }
 

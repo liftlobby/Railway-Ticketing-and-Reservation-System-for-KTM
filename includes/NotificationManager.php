@@ -309,8 +309,11 @@ class NotificationManager {
         try {
             $this->mailer->clearAddresses();
             $this->mailer->addAddress($to);
+            $this->mailer->isHTML(true); // Enable HTML email
             $this->mailer->Subject = $subject;
             $this->mailer->Body = $message;
+            // Set plain text version for non-HTML mail clients
+            $this->mailer->AltBody = strip_tags(str_replace(['<br>', '</div>', '</p>'], "\n", $message));
             $this->mailer->send();
             return true;
         } catch (Exception $e) {
@@ -368,6 +371,30 @@ class NotificationManager {
             error_log("Error marking notification as read: " . $e->getMessage());
             return false;
         }
+    }
+
+    public function sendReportResponse($email, $name, $subject, $response) {
+        $emailSubject = "Re: " . $subject . " - KTM Railway System";
+        $emailMessage = "
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <div style='background-color: #003366; color: white; padding: 20px; text-align: center;'>
+                <h2>KTM Railway System Response</h2>
+            </div>
+            <div style='padding: 20px; background-color: #f8f9fa;'>
+                <p>Dear {$name},</p>
+                <p>Thank you for your report regarding \"{$subject}\". Here is our response:</p>
+                <div style='background-color: white; padding: 15px; border-left: 4px solid #003366; margin: 20px 0;'>
+                    " . nl2br(htmlspecialchars($response)) . "
+                </div>
+                <p>If you have any further questions, please don't hesitate to contact us.</p>
+                <p>Best regards,<br>KTM Railway System Staff</p>
+            </div>
+            <div style='background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
+                This is an automated response. Please do not reply to this email.
+            </div>
+        </div>";
+        
+        return $this->sendEmail($email, $emailSubject, $emailMessage);
     }
 }
 ?>
