@@ -108,7 +108,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $departure_time = $_POST['departure_time'];
                 $arrival_time = $_POST['arrival_time'];
                 $platform_number = $_POST['platform_number'];
-
                 // Get current schedule details
                 $stmt = $conn->prepare("SELECT * FROM schedules WHERE schedule_id = ?");
                 $stmt->bind_param("i", $schedule_id);
@@ -155,38 +154,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
 
                         if (!empty($changes)) {
-                            // Prepare schedule change message
-                            $message = "Schedule Change Notice\n\n";
-                            $message .= "Train: {$train_number}\n";
-                            $message .= "From: {$departure_station}\n";
-                            $message .= "To: {$arrival_station}\n\n";
-                            $message .= "Changes Made:\n";
+                            // Format changes for HTML
+                            $changesList = "<ul style='margin: 0; padding-left: 20px;'>";
                             foreach ($changes as $change) {
-                                $message .= "- {$change}\n";
+                                $changesList .= "<li style='margin-bottom: 8px;'>{$change}</li>";
                             }
-                            $message .= "\nUpdated Schedule Details:\n";
-                            $message .= "Departure: " . date('d M Y, h:i A', strtotime($departure_time)) . "\n";
-                            $message .= "Arrival: " . date('d M Y, h:i A', strtotime($arrival_time)) . "\n";
-                            $message .= "Platform: {$platform_number}\n";
+                            $changesList .= "</ul>";
                             
                             // Send notification to each ticket holder
                             while ($ticket = $affected_tickets->fetch_assoc()) {
-                                // Send email notification
-                                $emailSubject = "Train Schedule Change Notice - Train {$train_number}";
-                                
-                                // Send through notification manager
-                                $notificationManager->sendScheduleChangeNotification(
-                                    $ticket['email'],
-                                    $ticket['username'],
-                                    $emailSubject,
-                                    $message
+                                // Prepare ticket details with changes
+                                $notificationDetails = array(
+                                    'train_number' => $train_number,
+                                    'departure_station' => $departure_station,
+                                    'arrival_station' => $arrival_station,
+                                    'departure_time' => $departure_time,
+                                    'arrival_time' => $arrival_time,
+                                    'platform_number' => $platform_number,
+                                    'user_name' => $ticket['username'],
+                                    'changes_list' => $changesList
                                 );
                                 
-                                // Also send through notification system
+                                // Send notification
                                 $notificationManager->sendTicketStatusNotification(
                                     $ticket['ticket_id'],
                                     'schedule_change',
-                                    $message
+                                    $notificationDetails
                                 );
                             }
                         }
@@ -249,7 +242,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'update_status':
                 $schedule_id = $_POST['schedule_id'];
                 $train_status = $_POST['train_status'];
-
                 $stmt = $conn->prepare("UPDATE schedules SET train_status = ? WHERE schedule_id = ?");
                 $stmt->bind_param("si", $train_status, $schedule_id);
 

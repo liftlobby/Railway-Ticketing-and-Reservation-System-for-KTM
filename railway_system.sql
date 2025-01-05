@@ -185,26 +185,6 @@ CREATE TABLE `auth_tokens` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `ticket_verifications`
---
-
-CREATE TABLE `ticket_verifications` (
-    `verification_id` INT PRIMARY KEY AUTO_INCREMENT,
-    `ticket_id` INT NOT NULL,
-    `staff_id` INT NOT NULL,
-    `verification_time` DATETIME NOT NULL,
-    `status` ENUM('success', 'failed') NOT NULL,
-    `error_message` TEXT NULL,
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (`ticket_id`) REFERENCES `tickets`(`ticket_id`),
-    FOREIGN KEY (`staff_id`) REFERENCES `staffs`(`staff_id`),
-    INDEX `idx_verification_time` (`verification_time`),
-    INDEX `idx_ticket_verification` (`ticket_id`, `verification_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `password_history`
 --
 
@@ -311,28 +291,5 @@ CREATE TABLE IF NOT EXISTS `notifications` (
     INDEX `idx_user_unread` (`user_id`, `is_read`),
     INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `notification_settings`
---
-
-CREATE TABLE IF NOT EXISTS `notification_settings` (
-    `user_id` INT PRIMARY KEY,
-    `email_notifications` TINYINT(1) DEFAULT 1,
-    `sms_notifications` TINYINT(1) DEFAULT 1,
-    `push_notifications` TINYINT(1) DEFAULT 1,
-    FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- --------------------------------------------------------
-
---
--- Insert default notification settings for existing users
---
-
-INSERT IGNORE INTO `notification_settings` (`user_id`, `email_notifications`, `sms_notifications`, `push_notifications`)
-SELECT `user_id`, 1, 1, 1 FROM `users`;
 
 COMMIT;
