@@ -107,74 +107,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $arrival_station = $_POST['arrival_station'];
                 $departure_time = $_POST['departure_time'];
                 $arrival_time = $_POST['arrival_time'];
-                $price = $_POST['price'];
-                $platform_number = $_POST['platform_number'] ?? null;
-                $train_status = $_POST['train_status'];
-                $available_seats = $_POST['available_seats'] ?? 100;
+                $platform_number = $_POST['platform_number'];
 
-                // Get the old schedule details to check what changed
-                $old_schedule_sql = "SELECT * FROM schedules WHERE schedule_id = ?";
-                $old_schedule_stmt = $conn->prepare($old_schedule_sql);
-                $old_schedule_stmt->bind_param("i", $schedule_id);
-                $old_schedule_stmt->execute();
-                $old_schedule = $old_schedule_stmt->get_result()->fetch_assoc();
+                // Get current schedule details
+                $stmt = $conn->prepare("SELECT * FROM schedules WHERE schedule_id = ?");
+                $stmt->bind_param("i", $schedule_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                $current_schedule = $result->fetch_assoc();
 
-                $stmt = $conn->prepare("UPDATE schedules SET train_number = ?, departure_station = ?, arrival_station = ?, departure_time = ?, arrival_time = ?, platform_number = ?, train_status = ?, price = ?, available_seats = ? WHERE schedule_id = ?");
-                $stmt->bind_param("sssssisidi", $train_number, $departure_station, $arrival_station, $departure_time, $arrival_time, $platform_number, $train_status, $price, $available_seats, $schedule_id);
+                $stmt = $conn->prepare("UPDATE schedules SET train_number = ?, departure_station = ?, arrival_station = ?, departure_time = ?, arrival_time = ?, platform_number = ? WHERE schedule_id = ?");
+                $stmt->bind_param("ssssssi", $train_number, $departure_station, $arrival_station, $departure_time, $arrival_time, $platform_number, $schedule_id);
 
                 if ($stmt->execute()) {
-                    // Initialize NotificationManager
-                    $notificationManager = new NotificationManager($conn);
+                    // Get all active tickets for this schedule
+                    $stmt = $conn->prepare("
+                        SELECT t.ticket_id, t.user_id, u.email, u.username 
+                        FROM tickets t 
+                        JOIN users u ON t.user_id = u.user_id
+                        WHERE t.schedule_id = ? AND t.status = 'active'
+                    ");
+                    $stmt->bind_param("i", $schedule_id);
+                    $stmt->execute();
+                    $affected_tickets = $stmt->get_result();
 
-                    // Get affected tickets
-                    $tickets_sql = "SELECT t.*, u.user_id 
-                                  FROM tickets t 
-                                  JOIN users u ON t.user_id = u.user_id 
-                                  WHERE t.schedule_id = ? AND t.status = 'active'";
-                    $tickets_stmt = $conn->prepare($tickets_sql);
-                    $tickets_stmt->bind_param("i", $schedule_id);
-                    $tickets_stmt->execute();
-                    $affected_tickets = $tickets_stmt->get_result();
+                    if ($affected_tickets->num_rows > 0) {
+                        // Create notification manager
+                        $notificationManager = new NotificationManager($conn);
 
-                    // Check what changed and notify affected passengers
-                    if ($old_schedule['train_status'] !== $train_status) {
-                        // Train status changed (delayed/cancelled)
-                        $status_message = "Train Status Update\n\n";
-                        $status_message .= "Train: {$train_number}\n";
-                        $status_message .= "From: {$departure_station}\n";
-                        $status_message .= "To: {$arrival_station}\n";
-                        $status_message .= "New Status: " . ucfirst($train_status) . "\n";
-                        
-                        if ($train_status === 'delayed') {
-                            $status_message .= "New Departure: " . date('d M Y, h:i A', strtotime($departure_time)) . "\n";
-                            $status_message .= "New Arrival: " . date('d M Y, h:i A', strtotime($arrival_time)) . "\n";
+                        // Check what changed
+                        $changes = array();
+                        if ($platform_number !== $current_schedule['platform_number']) {
+                            $changes[] = "Platform changed from {$current_schedule['platform_number']} to {$platform_number}";
                         }
-                        
-                        while ($ticket = $affected_tickets->fetch_assoc()) {
-                            $notificationManager->sendTicketStatusNotification(
-                                $ticket['ticket_id'],
-                                $train_status,
-                                $status_message
-                            );
+                        if ($departure_time !== $current_schedule['departure_time']) {
+                            $old_time = date('d M Y, h:i A', strtotime($current_schedule['departure_time']));
+                            $new_time = date('d M Y, h:i A', strtotime($departure_time));
+                            $changes[] = "Departure time changed from {$old_time} to {$new_time}";
                         }
-                        $affected_tickets->data_seek(0); // Reset result pointer
-                    }
+                        if ($arrival_time !== $current_schedule['arrival_time']) {
+                            $old_time = date('d M Y, h:i A', strtotime($current_schedule['arrival_time']));
+                            $new_time = date('d M Y, h:i A', strtotime($arrival_time));
+                            $changes[] = "Arrival time changed from {$old_time} to {$new_time}";
+                        }
+                        if ($train_number !== $current_schedule['train_number']) {
+                            $changes[] = "Train number changed from {$current_schedule['train_number']} to {$train_number}";
+                        }
 
-                    if ($old_schedule['platform_number'] !== $platform_number) {
-                        // Platform changed
-                        $platform_message = "Platform Change Notice\n\n";
-                        $platform_message .= "Train: {$train_number}\n";
-                        $platform_message .= "From: {$departure_station}\n";
-                        $platform_message .= "To: {$arrival_station}\n";
-                        $platform_message .= "New Platform: {$platform_number}\n";
-                        $platform_message .= "Departure: " . date('d M Y, h:i A', strtotime($departure_time)) . "\n";
-                        
-                        while ($ticket = $affected_tickets->fetch_assoc()) {
-                            $notificationManager->sendTicketStatusNotification(
-                                $ticket['ticket_id'],
-                                'platform_change',
-                                $platform_message
-                            );
+                        if (!empty($changes)) {
+                            // Prepare schedule change message
+                            $message = "Schedule Change Notice\n\n";
+                            $message .= "Train: {$train_number}\n";
+                            $message .= "From: {$departure_station}\n";
+                            $message .= "To: {$arrival_station}\n\n";
+                            $message .= "Changes Made:\n";
+                            foreach ($changes as $change) {
+                                $message .= "- {$change}\n";
+                            }
+                            $message .= "\nUpdated Schedule Details:\n";
+                            $message .= "Departure: " . date('d M Y, h:i A', strtotime($departure_time)) . "\n";
+                            $message .= "Arrival: " . date('d M Y, h:i A', strtotime($arrival_time)) . "\n";
+                            $message .= "Platform: {$platform_number}\n";
+                            
+                            // Send notification to each ticket holder
+                            while ($ticket = $affected_tickets->fetch_assoc()) {
+                                // Send email notification
+                                $emailSubject = "Train Schedule Change Notice - Train {$train_number}";
+                                
+                                // Send through notification manager
+                                $notificationManager->sendScheduleChangeNotification(
+                                    $ticket['email'],
+                                    $ticket['username'],
+                                    $emailSubject,
+                                    $message
+                                );
+                                
+                                // Also send through notification system
+                                $notificationManager->sendTicketStatusNotification(
+                                    $ticket['ticket_id'],
+                                    'schedule_change',
+                                    $message
+                                );
+                            }
                         }
                     }
 

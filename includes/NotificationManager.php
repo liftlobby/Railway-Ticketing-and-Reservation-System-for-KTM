@@ -396,5 +396,43 @@ class NotificationManager {
         
         return $this->sendEmail($email, $emailSubject, $emailMessage);
     }
+
+    public function sendScheduleChangeNotification($email, $username, $subject, $message) {
+        try {
+            $this->mailer->clearAddresses();
+            $this->mailer->addAddress($email);
+            $this->mailer->isHTML(true);
+            $this->mailer->Subject = $subject;
+            
+            // Create HTML version of the message
+            $htmlMessage = nl2br(htmlspecialchars($message));
+            $htmlBody = "
+            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+                <div style='background-color: #f8f9fa; padding: 20px; text-align: center;'>
+                    <h2 style='color: #0056b3;'>KTM Schedule Update</h2>
+                </div>
+                <div style='padding: 20px;'>
+                    <p>Dear {$username},</p>
+                    <p>We're writing to inform you about changes to your upcoming train journey.</p>
+                    <div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;'>
+                        {$htmlMessage}
+                    </div>
+                    <p>If you have any questions or concerns, please don't hesitate to contact us.</p>
+                    <p>Best regards,<br>KTM Management</p>
+                </div>
+                <div style='background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
+                    <p>This is an automated message from KTM Railway System. Please do not reply to this email.</p>
+                </div>
+            </div>";
+            
+            $this->mailer->Body = $htmlBody;
+            $this->mailer->AltBody = $message;
+            
+            return $this->mailer->send();
+        } catch (Exception $e) {
+            error_log("Error sending schedule change email: " . $e->getMessage());
+            return false;
+        }
+    }
 }
 ?>
