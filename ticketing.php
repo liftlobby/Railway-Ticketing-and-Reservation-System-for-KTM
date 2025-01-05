@@ -1,41 +1,34 @@
-<!-- Ticketing & Reservation Page -->
 <?php
 session_start();
 require_once 'config/database.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php");
-    exit();
-}
-
-// Debug information
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 // Set timezone to match your server's timezone
 date_default_timezone_set('Asia/Kuala_Lumpur');
 
-// Add buffer time (e.g., 30 minutes before departure)
-$buffer_time = date('Y-m-d H:i:s', strtotime('+30 minutes'));
+// Current time
 $current_time = date('Y-m-d H:i:s');
 
-// Fetch only available schedules
-$sql = "SELECT s.*, 
-               COALESCE(s.available_seats, 50) as available_seats,
-               (COALESCE(s.available_seats, 50) > 0) as is_available,
-               CASE 
-                   WHEN s.departure_time <= DATE_ADD(NOW(), INTERVAL 30 MINUTE) THEN 'closing'
-                   ELSE 'available'
-               END as booking_status
-        FROM schedules s 
-        WHERE s.departure_time > NOW()
-        AND COALESCE(s.available_seats, 50) > 0
-        ORDER BY s.departure_time ASC";
+// Query to get available schedules
+$sql = "SELECT * FROM schedules 
+        WHERE departure_time >= ? 
+        AND available_seats > 0 
+        AND train_status = 'on_time'
+        ORDER BY departure_time ASC";
 
-$result = $conn->query($sql);
+// Use prepared statement to prevent SQL injection
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $current_time);
+$stmt->execute();
+$result = $stmt->get_result();
+
+// Store results in array for multiple use
+$schedules = [];
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $schedules[] = $row;
+    }
+}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,199 +37,41 @@ $result = $conn->query($sql);
     <title>KTM Ticketing & Reservation</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style/style_ticketing.css">
     <style>
-        .schedule-container {
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 20px;
+        /* Emergency override styles */
+        main.schedule-container {
+            width: 100% !important;
+            max-width: 1200px !important;
+            margin: 20px auto !important;
+            padding: 20px !important;
+            display: block !important;
         }
-
         .schedule-grid {
-            display: grid;
-            grid-template-columns: minmax(350px, 600px);
-            gap: 20px;
-            margin-top: 20px;
-            justify-content: center;
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)) !important;
+            gap: 20px !important;
+            width: 100% !important;
         }
-
         .schedule-card {
-            background: white;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 20px;
-            transition: transform 0.2s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .schedule-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
-        .schedule-info {
-            flex: 1;
-        }
-
-        .schedule-time {
-            font-size: 1.2em;
-            color: #003366;
-            margin-bottom: 10px;
-        }
-
-        .schedule-stations {
-            color: #666;
-            margin-bottom: 10px;
-        }
-
-        .schedule-price {
-            font-weight: bold;
-            color: #003366;
-        }
-
-        .seats-info {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .seats-available {
-            color: #28a745;
-        }
-
-        .seats-closing {
-            color: #ff6b6b;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .book-button {
-            background: #003366;
-            color: #ffcc00;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            width: 100%;
-            margin-top: 10px;
-        }
-
-        .book-button:hover {
-            background: #002244;
-        }
-
-        .book-button.closing {
-            background: #ff6b6b;
-        }
-
-        .train-info {
-            margin: 10px 0;
-            color: #666;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.9em;
-            font-weight: bold;
-        }
-
-        .status-badge.closing {
-            background: #ff6b6b;
-            color: white;
-            animation: blink 1s infinite;
-        }
-
-        .status-badge.available {
-            background: #28a745;
-            color: white;
-        }
-
-        .ticket-quantity {
-            margin: 15px 0;
-        }
-
-        .ticket-quantity label {
-            display: block;
-            margin-bottom: 5px;
-            color: #003366;
-        }
-
-        .ticket-quantity select {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 5px;
-        }
-
-        .total-price {
-            font-size: 1.1em;
-            color: #003366;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .page-title {
-            color: #003366;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2em;
-        }
-
-        .no-schedules {
-            text-align: center;
-            padding: 40px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            color: #666;
-        }
-
-        .passenger-info {
-            margin: 15px 0;
-        }
-
-        .passenger-info label {
-            display: block;
-            margin-bottom: 5px;
-            color: #003366;
-        }
-
-        .passenger-info input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 5px;
+            display: flex !important;
+            flex-direction: column !important;
+            background: white !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
     </style>
 </head>
 <body>
     <?php require_once 'Head_and_Foot/header.php'; ?>
 
-    <div class="schedule-container">
+    <main class="schedule-container">
         <h1 class="page-title">Available Train Tickets</h1>
 
-        <?php if ($result->num_rows == 0): ?>
-            <div class="no-schedules">
-                <p>No available trains at the moment.</p>
-                <p>Please check back later for new schedules.</p>
-            </div>
-        <?php else: ?>
+        <?php if (!empty($schedules)): ?>
             <div class="schedule-grid">
-                <?php while ($schedule = $result->fetch_assoc()): ?>
-                    <div class="schedule-card">
+                <?php $count = 0; foreach ($schedules as $schedule): ?>
+                    <div class="schedule-card" id="card-<?php echo $count; ?>">
                         <div class="schedule-info">
                             <div class="schedule-time">
                                 <strong>Departure:</strong> <?php echo date('d M Y, h:i A', strtotime($schedule['departure_time'])); ?><br>
@@ -252,22 +87,20 @@ $result = $conn->query($sql);
                             <div class="schedule-price">
                                 <strong>Price:</strong> RM <?php echo number_format($schedule['price'], 2); ?>
                             </div>
-                            <div class="seats-info <?php echo $schedule['booking_status'] == 'closing' ? 'seats-closing' : 'seats-available'; ?>">
+                            <div class="seats-info">
                                 <i class="fas fa-chair"></i>
-                                <?php echo $schedule['available_seats']; ?> seats available
-                                <?php if ($schedule['booking_status'] == 'closing'): ?>
+                                <span><?php echo $schedule['available_seats']; ?> seats available</span>
+                                <?php if (strtotime($schedule['departure_time']) <= strtotime('+30 minutes')): ?>
                                     <span class="status-badge closing">Closing Soon</span>
                                 <?php else: ?>
                                     <span class="status-badge available">Available</span>
                                 <?php endif; ?>
                             </div>
-                            <form action="process_booking.php" method="POST">
+                            <form action="process_booking.php" method="POST" class="booking-form">
                                 <input type="hidden" name="schedule_id" value="<?php echo $schedule['schedule_id']; ?>">
                                 <input type="hidden" name="price" value="<?php echo $schedule['price']; ?>">
                                 <div class="ticket-quantity">
-                                    <label for="ticket_quantity_<?php echo $schedule['schedule_id']; ?>">
-                                        Number of Tickets:
-                                    </label>
+                                    <label for="ticket_quantity_<?php echo $schedule['schedule_id']; ?>">Number of Tickets:</label>
                                     <select name="ticket_quantity" 
                                             id="ticket_quantity_<?php echo $schedule['schedule_id']; ?>"
                                             onchange="updateTotalPrice(this, <?php echo $schedule['price']; ?>)">
@@ -280,27 +113,26 @@ $result = $conn->query($sql);
                                     </div>
                                 </div>
                                 <div class="passenger-info">
-                                    <label for="passenger_name_<?php echo $schedule['schedule_id']; ?>">
-                                        Passenger Name:
-                                    </label>
+                                    <label for="passenger_name_<?php echo $schedule['schedule_id']; ?>">Passenger Name:</label>
                                     <input type="text" 
                                            name="passenger_name" 
                                            id="passenger_name_<?php echo $schedule['schedule_id']; ?>"
-                                           class="form-control" 
                                            required
                                            placeholder="Enter passenger name">
                                 </div>
-                                <button type="submit" 
-                                        class="book-button <?php echo $schedule['booking_status'] == 'closing' ? 'closing' : ''; ?>">
-                                    Book Now
-                                </button>
+                                <button type="submit" class="book-button">Book Now</button>
                             </form>
                         </div>
                     </div>
-                <?php endwhile; ?>
+                <?php $count++; endforeach; ?>
+            </div>
+        <?php else: ?>
+            <div class="no-schedules">
+                <p>No available trains at the moment.</p>
+                <p>Please check back later for new schedules.</p>
             </div>
         <?php endif; ?>
-    </div>
+    </main>
 
     <?php require_once 'Head_and_Foot/footer.php'; ?>
 
