@@ -48,24 +48,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         header("Location: change_password.php");
                         exit();
                     }
-
-                    // Check if password needs rehash
-                    if (PasswordPolicy::needsRehash($staff['password'])) {
-                        $new_hash = PasswordPolicy::hashPassword($password);
-                        $update_stmt = $conn->prepare("UPDATE staffs SET password = ? WHERE staff_id = ?");
-                        $update_stmt->bind_param("si", $new_hash, $staff['staff_id']);
-                        $update_stmt->execute();
-                    }
                     
-                    // Reset failed attempts on successful login
-                    $stmt = $conn->prepare("UPDATE staffs SET failed_attempts = 0, locked_until = NULL, last_login = NOW() WHERE staff_id = ?");
-                    $stmt->bind_param("i", $staff['staff_id']);
-                    $stmt->execute();
+                    // Reset failed attempts
+                    $update = $conn->prepare("UPDATE staffs SET failed_attempts = 0, locked_until = NULL WHERE staff_id = ?");
+                    $update->bind_param("i", $staff['staff_id']);
+                    $update->execute();
                     
                     // Set session variables
                     $_SESSION['staff_id'] = $staff['staff_id'];
                     $_SESSION['staff_username'] = $staff['username'];
-                    $_SESSION['staff_role'] = $staff['role'];
+                    $_SESSION['staff_role'] = $staff['role']; 
+                    
+                    // Log successful login
+                    $log_sql = "INSERT INTO staff_login_logs (staff_id, action, ip_address) VALUES (?, 'login', ?)";
+                    $log_stmt = $conn->prepare($log_sql);
+                    $ip = $_SERVER['REMOTE_ADDR'];
+                    $log_stmt->bind_param("is", $staff['staff_id'], $ip);
+                    $log_stmt->execute();
                     
                     $conn->commit();
                     header("Location: dashboard.php");
@@ -73,26 +72,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 } else {
                     // Increment failed attempts
                     $failed_attempts = $staff['failed_attempts'] + 1;
+                    $locked_until = null;
                     
-                    if (PasswordPolicy::shouldLockAccount($failed_attempts)) {
-                        // Lock account
-                        $locked_until = PasswordPolicy::getLockoutTime();
-                        $stmt = $conn->prepare("UPDATE staffs SET failed_attempts = ?, locked_until = ?, account_status = 'locked' WHERE staff_id = ?");
-                        $stmt->bind_param("isi", $failed_attempts, $locked_until, $staff['staff_id']);
-                    } else {
-                        // Just update failed attempts
-                        $stmt = $conn->prepare("UPDATE staffs SET failed_attempts = ? WHERE staff_id = ?");
-                        $stmt->bind_param("ii", $failed_attempts, $staff['staff_id']);
+                    // Lock account if failed attempts exceed limit
+                    if ($failed_attempts >= 5) {
+                        $locked_until = date('Y-m-d H:i:s', strtotime('+30 minutes'));
                     }
-                    $stmt->execute();
                     
-                    throw new Exception(PasswordPolicy::getLoginAttemptMessage($failed_attempts));
+                    $update = $conn->prepare("UPDATE staffs SET failed_attempts = ?, locked_until = ? WHERE staff_id = ?");
+                    $update->bind_param("isi", $failed_attempts, $locked_until, $staff['staff_id']);
+                    $update->execute();
+                    
+                    throw new Exception("Invalid username or password. Attempts remaining: " . (5 - $failed_attempts));
                 }
             } else {
-                throw new Exception("Invalid credentials.");
+                throw new Exception("Invalid username or password");
             }
-            
-            $conn->commit();
         } catch (Exception $e) {
             $conn->rollback();
             MessageUtility::setErrorMessage($e->getMessage());
@@ -108,50 +103,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Staff Login - KTM Railway System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/boxicons@2.0.7/css/boxicons.min.css" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <style>
         body {
-            background-color: #f8f9fa;
+            background-color: #f0f8ff;
         }
         .login-container {
             max-width: 400px;
             margin: 100px auto;
-        }
-        .card {
-            border: none;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .card-header {
-            background-color: #0056b3;
-            color: white;
-            text-align: center;
-            border-radius: 10px 10px 0 0;
             padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
-        .card-header h1 {
-            font-size: 24px;
-            margin: 0;
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
         }
-        .card-body {
-            padding: 30px;
+        .login-header img {
+            max-width: 150px;
+            margin-bottom: 20px;
         }
-        .form-floating {
+        .form-group {
             margin-bottom: 20px;
         }
         .btn-login {
+            background-color: #003366;
+            color: white;
             width: 100%;
-            padding: 12px;
-            font-size: 16px;
-            background-color: #0056b3;
-            border: none;
+            padding: 10px;
         }
         .btn-login:hover {
-            background-color: #003d82;
-        }
-        .alert {
-            margin-bottom: 20px;
-            text-align: center;
+            background-color: #002244;
+            color: white;
         }
         .home-btn {
             position: fixed;
@@ -164,12 +148,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             align-items: center;
             gap: 8px;
             border-radius: 30px;
+            background-color: white;
+            color: #003366;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
+            text-decoration: none;
         }
         .home-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            background-color: #003366;
+            color: white;
         }
         .home-btn i {
             font-size: 20px;
@@ -178,35 +167,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body>
     <!-- Back to Home Button -->
-    <a href="../index.php" class="btn btn-light home-btn">
+    <a href="../index.php" class="home-btn">
         <i class='bx bx-home'></i> Back to Home
     </a>
 
     <div class="container">
         <div class="login-container">
-            <div class="card">
-                <div class="card-header">
-                    <h1>Staff Login</h1>
+            <div class="login-header">
+                <img src="../image/logo.png" alt="KTM Logo">
+                <h2>Staff Login</h2>
+            </div>
+            
+            <?php echo MessageUtility::displayMessages(); ?>
+            
+            <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" class="form-control" id="username" name="username" required>
                 </div>
-                <div class="card-body">
-                    <?php if (MessageUtility::hasErrorMessage()): ?>
-                        <div class="alert alert-danger">
-                            <?php echo MessageUtility::getErrorMessage(); ?>
-                        </div>
-                    <?php endif; ?>
-
-                    <form method="POST" action="login.php">
-                        <div class="form-floating mb-3">
-                            <input type="text" class="form-control" id="username" name="username" placeholder="Username" required>
-                            <label for="username">Username</label>
-                        </div>
-                        <div class="form-floating mb-4">
-                            <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
-                            <label for="password">Password</label>
-                        </div>
-                        <button type="submit" class="btn btn-primary btn-login">Login</button>
-                    </form>
+                
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
                 </div>
+                
+                <button type="submit" class="btn btn-login">Login</button>
+            </form>
+            
+            <div class="text-center mt-3">
+                <a href="forgot_password.php">Forgot Password?</a>
             </div>
         </div>
     </div>
