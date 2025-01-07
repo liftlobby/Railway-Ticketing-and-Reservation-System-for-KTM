@@ -148,7 +148,7 @@ $late_tickets_result = $late_tickets_stmt->get_result();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ticket Cancellation - KTM Railway System</title>
+    <title>Ticket Cancellation - Railway System</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style/style_ticketcancellation.css">
@@ -169,7 +169,7 @@ $late_tickets_result = $late_tickets_stmt->get_result();
                 <li>No refunds will be provided for missed departures</li>
             </ul>
             <div class="important-note">
-                <strong>Important:</strong> Refunds can only be physically collected at any KTM station. 
+                <strong>Important:</strong> Refunds can only be physically collected at any station. 
                 Please bring your booking confirmation and valid ID.
             </div>
         </div>
@@ -181,7 +181,7 @@ $late_tickets_result = $late_tickets_stmt->get_result();
                 <li>Select the ticket you wish to cancel from your active tickets below</li>
                 <li>Review the ticket details and cancellation policy</li>
                 <li>Confirm your cancellation request</li>
-                <li>Visit any KTM station with your booking confirmation and valid ID to collect your refund</li>
+                <li>Visit any station with your booking confirmation and valid ID to collect your refund</li>
             </ul>
         </div>
 
@@ -258,7 +258,7 @@ $late_tickets_result = $late_tickets_stmt->get_result();
                     <h3 style="color: #003366; margin-bottom: 10px;">Refund Information</h3>
                     <ul style="list-style-type: none; padding: 0;">
                         <li style="margin-bottom: 5px;">• Your refund will be processed within 7 working days</li>
-                        <li style="margin-bottom: 5px;">• Visit any KTM station with your booking confirmation and ID</li>
+                        <li style="margin-bottom: 5px;">• Visit any station with your booking confirmation and ID</li>
                         <li style="margin-bottom: 5px;">• Service charges may apply</li>
                     </ul>
                 </div>

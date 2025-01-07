@@ -12,8 +12,8 @@ $unread_count = $notificationManager->getUnreadNotificationCount($_SESSION['staf
 
 <nav class="navbar">
     <div class="navbar-brand">
-        <img src="../images/ktm_logo.png" alt="KTM Logo" class="navbar-logo">
-        <span class="navbar-title">KTM Staff Portal</span>
+        <img src="../images/train_icon.png" alt="Railway Logo" class="navbar-logo">
+        <span class="navbar-title">Railway Staff Portal</span>
     </div>
     <div class="navbar-menu">
         <a href="dashboard.php" class="navbar-item">

@@ -32,7 +32,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 try {
                     // Prepare email content
                     $to = $email;
-                    $emailSubject = "Report Submission Confirmation - KTM Railway System";
+                    $emailSubject = "Report Submission Confirmation - Railway System";
                     $emailMessage = "
                         <html>
                         <head>
@@ -46,14 +46,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             <p><strong>Message:</strong><br><em>\"" . substr($message, 0, 100) . (strlen($message) > 100 ? '...' : '') . "\"</em></p>
                             <p>Your Report ID is: <strong>#$reportId</strong></p>
                             <p>We will review your report and get back to you as soon as possible.</p>
-                            <p>Best regards,<br>KTM Railway System Team</p>
+                            <p>Best regards,<br>Railway System Team</p>
                         </body>
                         </html>
                     ";
                     
                     $headers = "MIME-Version: 1.0\r\n";
                     $headers .= "Content-type: text/html; charset=utf-8\r\n";
-                    $headers .= "From: KTM Railway System <noreply@ktm.com>\r\n";
+                    $headers .= "From: Railway System <noreply@railway.com>\r\n";
                     
                     // Try to send email but don't throw error if it fails
                     @mail($to, $emailSubject, $emailMessage, $headers);
@@ -105,7 +105,7 @@ if (isset($_SESSION['error_message'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Report a Problem - KTM Railway System</title>
+    <title>Report a Problem - Railway System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">

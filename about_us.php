@@ -18,9 +18,9 @@ session_start();
         <h1>About Us</h1>
         
         <section class="history">
-            <h2>History of KTM Railway</h2>
+            <h2>History of Railway</h2>
             <p>
-                KTM (Keretapi Tanah Melayu) is Malaysia's main railway operator. Established in 1885, KTM has a rich history of providing reliable and efficient rail services across the country. Over the years, KTM has expanded its network and services, connecting major cities and towns, and playing a crucial role in the development of Malaysia's transportation infrastructure.
+                Place your history of railway here
             </p>
         </section>
         

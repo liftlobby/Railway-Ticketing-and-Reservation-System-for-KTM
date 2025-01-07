@@ -1,6 +1,6 @@
-# KTM Railway System
+# Railway System
 
-A railway ticket booking and management system for KTM (Keretapi Tanah Melayu).
+A railway ticket booking and management system for Railway System.
 
 ## Features
 
@@ -77,14 +77,14 @@ A railway ticket booking and management system for KTM (Keretapi Tanah Melayu).
 6. Download/print ticket with QR code
 
 ### Staff Portal
-1. Access the staff portal through `http://localhost/KTM/staff/` or click the `staff login` in the main page footer
+1. Access the staff portal through `http://localhost/<your_directory_name>/staff/` or click the `staff login` in the main page footer
 2. Login with staff credentials
 3. Use QR scanner or manual entry to verify tickets
 4. View and manage train schedules
 
 ## Security Features
 - Session management
-- Password hashing with Argon2id, salting (Unique Salt) and peppering (KTM_SECURE_2024)
+- Password hashing with Argon2id, salting (Unique Salt) and peppering (RAILWAY_SECURE_2024)
 - Input validation
 - SQL injection prevention
 - XSS protection

@@ -8,7 +8,7 @@ if (!defined('SECURE_ACCESS')) {
 // Security Configuration
 return [
     // Password Pepper (used for additional password security)
-    'password_pepper' => 'KTM_SECURE_2024', // Change this in production!
+    'password_pepper' => 'RAILWAY_SECURE_2024', // Change this in production!
     
     // Password Policy Settings
     'password_policy' => [

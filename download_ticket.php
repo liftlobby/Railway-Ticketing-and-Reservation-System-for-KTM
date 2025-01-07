@@ -38,7 +38,7 @@ try {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>KTM Train Ticket #<?php echo $ticket['ticket_id']; ?></title>
+        <title>Train Ticket #<?php echo $ticket['ticket_id']; ?></title>
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -113,7 +113,7 @@ try {
     <body>
         <div class="ticket-container">
             <div class="ticket-header">
-                <h1>KTM Railway Ticket</h1>
+                <h1>Railway Ticket</h1>
                 <h2>Train <?php echo htmlspecialchars($ticket['train_number']); ?></h2>
             </div>
 
@@ -163,7 +163,7 @@ try {
 
             <div class="footer">
                 <p>This is an electronically generated ticket.</p>
-                <p>Thank you for choosing KTM Railway!</p>
+                <p>Thank you for choosing Railway!</p>
             </div>
 
             <div class="no-print" style="text-align: center; margin-top: 30px;">

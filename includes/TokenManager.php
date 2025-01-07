@@ -2,7 +2,7 @@
 class TokenManager {
     private $conn;
     private const TOKEN_VALIDITY = 86400; // 24 hours in seconds
-    private const PEPPER = "KTM_SECURE_TICKET_"; // Add a pepper for additional security
+    private const PEPPER = "RAILWAY_SECURE_TICKET_"; // Add a pepper for additional security
 
     public function __construct($database_connection) {
         $this->conn = $database_connection;
