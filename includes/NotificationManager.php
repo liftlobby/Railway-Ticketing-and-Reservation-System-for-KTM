@@ -1,3 +1,4 @@
+
 <?php
 // Include PHPMailer files
 require_once __DIR__ . '/../lib/PHPMailer/src/PHPMailer.php';
@@ -26,7 +27,7 @@ class NotificationManager {
         $this->mailer->Host = 'smtp.gmail.com';
         $this->mailer->SMTPAuth = true;
         $this->mailer->Username = '<your_email>';
-        $this->mailer->Password = '<app password';
+        $this->mailer->Password = '<app password>';
         $this->mailer->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $this->mailer->Port = 587;
         $this->mailer->setFrom('<your_email>', 'Railway System');

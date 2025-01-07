@@ -62,9 +62,11 @@ A railway ticket booking and management system for Railway System.
    - Clone/copy the project to `htdocs` directory
    - Ensure proper file permissions
    - Configure base URL in configuration files
+   - Need to add your email and app password in `../includes/NotificationManager.php` so that notification emails can be sent
+
+4. **Admin Account Setup**
    - Remember to run admin_hash.php in staff directory (Code: ../staff/> php admin_hash.php)
      - To generate admin account (Username: admin, Password: Admin@123)
-    
 
 ## Usage
 
@@ -92,4 +94,4 @@ A railway ticket booking and management system for Railway System.
 - QR code authentication with PHP QR Code and special tokens generated with SHA-256
 
 ## License
-This project is proprietary software. All rights reserved.
+This project is proprietary software. All rights reserved. Unauthorized commercial use is strictly prohibited. Please contact the author for further information.
