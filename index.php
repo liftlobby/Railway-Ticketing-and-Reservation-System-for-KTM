@@ -37,7 +37,7 @@ session_start();
             color: inherit;
         }
     </style>
-    <title>Railway Ticketing and Reservation System for KTM</title>
+    <title>Railway Ticketing and Reservation System</title>
 </head>
 
 <body>
@@ -64,7 +64,7 @@ session_start();
     <?php endif; ?>
 
     <div class="index-content">
-        <h1>Welcome to KTM Ticketing and Reservation System</h1>
+        <h1>Welcome to Ticketing and Reservation System</h1>
         <h2>Have A Safe Journey With Us</h2>
         <br/><br/><br/>
         <?php if (isset($_SESSION['user_id'])): ?>

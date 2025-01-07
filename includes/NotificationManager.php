@@ -25,11 +25,11 @@ class NotificationManager {
         $this->mailer->isSMTP();
         $this->mailer->Host = 'smtp.gmail.com';
         $this->mailer->SMTPAuth = true;
-        $this->mailer->Username = 'kaizen20020222@gmail.com';
-        $this->mailer->Password = 'xkrh kblr dhvt ihcp';
+        $this->mailer->Username = '<your_email>';
+        $this->mailer->Password = '<app password';
         $this->mailer->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $this->mailer->Port = 587;
-        $this->mailer->setFrom('kaizen20020222@gmail.com', 'KTM Railway System');
+        $this->mailer->setFrom('<your_email>', 'Railway System');
     }
 
     private function getTicketDetails($ticketId) {
@@ -55,7 +55,7 @@ class NotificationManager {
 
         switch ($type) {
             case 'booked':
-                $template['subject'] = "KTM Ticket Booking Confirmation - Train {$ticketDetails['train_number']}";
+                $template['subject'] = "Ticket Booking Confirmation - Train {$ticketDetails['train_number']}";
                 $template['message'] = "
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
                     <div style='background-color: #003366; color: white; padding: 20px; text-align: center;'>
@@ -63,7 +63,7 @@ class NotificationManager {
                     </div>
                     <div style='padding: 20px; background-color: #f8f9fa;'>
                         <p>Dear {$ticketDetails['user_name']},</p>
-                        <p>Thank you for choosing KTM Railway System. Your ticket has been confirmed!</p>
+                        <p>Thank you for choosing Railway System. Your ticket has been confirmed!</p>
                         
                         <div style='background-color: white; padding: 15px; border-left: 4px solid #003366; margin: 20px 0;'>
                             <h3 style='color: #003366; margin-top: 0;'>Booking Details</h3>
@@ -125,7 +125,7 @@ class NotificationManager {
                             </ul>
                         </div>
                         
-                        <p style='margin-top: 20px;'>Best regards,<br>KTM Railway System</p>
+                        <p style='margin-top: 20px;'>Best regards,<br>Railway System</p>
                     </div>
                     <div style='background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
                         This is an automated notification. Please do not reply to this email.
@@ -134,7 +134,7 @@ class NotificationManager {
                 break;
 
             case 'cancelled':
-                $template['subject'] = "KTM Ticket Cancellation Confirmation - Train {$ticketDetails['train_number']}";
+                $template['subject'] = "Ticket Cancellation Confirmation - Train {$ticketDetails['train_number']}";
                 $template['message'] = "
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
                     <div style='background-color: #003366; color: white; padding: 20px; text-align: center;'>
@@ -176,10 +176,10 @@ class NotificationManager {
 
                         <div style='background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;'>
                             <h3 style='color: #003366; margin-top: 0;'>Refund Information</h3>
-                            <p style='margin: 0; color: #666;'>Visit any KTM station with your booking confirmation and valid ID to collect your refund within 7 working days.</p>
+                            <p style='margin: 0; color: #666;'>Visit any station with your booking confirmation and valid ID to collect your refund within 7 working days.</p>
                         </div>
 
-                        <p style='margin-top: 20px;'>Best regards,<br>KTM Railway System</p>
+                        <p style='margin-top: 20px;'>Best regards,<br>Railway System</p>
                     </div>
                     <div style='background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
                         This is an automated notification. Please do not reply to this email.
@@ -214,11 +214,11 @@ class NotificationManager {
                 break;
 
             case 'schedule_change':
-                $template['subject'] = "KTM Schedule Change Notice - Train {$ticketDetails['train_number']}";
+                $template['subject'] = "Schedule Change Notice - Train {$ticketDetails['train_number']}";
                 $template['message'] = "
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
                     <div style='background-color: #003366; color: white; padding: 20px; text-align: center;'>
-                        <h2 style='margin:0;'>KTM Schedule Change Notice</h2>
+                        <h2 style='margin:0;'>Schedule Change Notice</h2>
                     </div>
                     <div style='padding: 20px; background-color: #f8f9fa;'>
                         <p>Dear {$ticketDetails['user_name']},</p>
@@ -245,7 +245,7 @@ class NotificationManager {
                         <p style='color: #666;'><strong>Important:</strong> Please arrive at the station at least 30 minutes before the departure time.</p>
 
                         
-                        <p style='margin-top: 20px;'>Best regards,<br>KTM Railway System</p>
+                        <p style='margin-top: 20px;'>Best regards,<br>Railway System</p>
                     </div>
                     <div style='background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
                         This is an automated notification. Please do not reply to this email.
@@ -254,8 +254,8 @@ class NotificationManager {
                 break;
         }
 
-        $template['message'] .= "\nFor any assistance, please contact our customer service or visit the nearest KTM counter.\n\n";
-        $template['message'] .= "Thank you for choosing KTM Railway System.\n";
+        $template['message'] .= "\nFor any assistance, please contact our customer service or visit the nearest counter.\n\n";
+        $template['message'] .= "Thank you for choosing Railway System.\n";
         $template['message'] .= "This is an automated message, please do not reply.";
 
         return $template;
@@ -354,7 +354,7 @@ class NotificationManager {
                 $this->createNotification($ticket['user_id'], 'train_delay', $message, $ticket['ticket_id']);
 
                 // Send email
-                $this->sendEmail($ticket['email'], "KTM Train Delay - {$ticket['train_number']}", $message);
+                $this->sendEmail($ticket['email'], "Train Delay - {$ticket['train_number']}", $message);
 
                 // Send SMS if phone number is available
                 if (!empty($ticket['no_phone'])) {
@@ -402,7 +402,7 @@ class NotificationManager {
                 $this->createNotification($ticket['user_id'], 'train_cancellation', $message, $ticket['ticket_id']);
 
                 // Send email
-                $this->sendEmail($ticket['email'], "KTM Train Cancellation - {$ticket['train_number']}", $message);
+                $this->sendEmail($ticket['email'], "Train Cancellation - {$ticket['train_number']}", $message);
 
                 // Send SMS if phone number is available
                 if (!empty($ticket['no_phone'])) {
@@ -429,7 +429,7 @@ class NotificationManager {
             $message .= "Reason: {$reason}\n";
         }
 
-        $message .= "\nWe apologize for any inconvenience caused. For more information, please log in to your KTM account or contact our support.";
+        $message .= "\nWe apologize for any inconvenience caused. For more information, please log in to your account or contact our support.";
         return $message;
     }
 
@@ -444,7 +444,7 @@ class NotificationManager {
             $message .= "Reason: {$reason}\n";
         }
 
-        $message .= "\nPlease log in to your KTM account for refund information or contact our support for assistance.";
+        $message .= "\nPlease log in to your account for refund information or contact our support for assistance.";
         return $message;
     }
 
@@ -517,11 +517,11 @@ class NotificationManager {
     }
 
     public function sendReportResponse($email, $name, $subject, $response) {
-        $emailSubject = "Re: " . $subject . " - KTM Railway System";
+        $emailSubject = "Re: " . $subject . " - Railway System";
         $emailMessage = "
         <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
             <div style='background-color: #003366; color: white; padding: 20px; text-align: center;'>
-                <h2>KTM Railway System Response</h2>
+                <h2>Railway System Response</h2>
             </div>
             <div style='padding: 20px; background-color: #f8f9fa;'>
                 <p>Dear {$name},</p>
@@ -531,7 +531,7 @@ class NotificationManager {
                     " . nl2br(htmlspecialchars($response)) . "
                 </div>
                 <p>If you have any further questions, please don't hesitate to contact us.</p>
-                <p>Best regards,<br>KTM Railway System Staff</p>
+                <p>Best regards,<br>Railway System Staff</p>
             </div>
             <div style='background-color: #f1f1f1; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
                 This is an automated response. Please do not reply to this email.
@@ -553,7 +553,7 @@ class NotificationManager {
             $htmlBody = "
             <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
                 <div style='background-color: #f8f9fa; padding: 20px; text-align: center;'>
-                    <h2 style='color: #0056b3;'>KTM Schedule Update</h2>
+                    <h2 style='color: #0056b3;'>Schedule Update</h2>
                 </div>
                 <div style='padding: 20px;'>
                     <p>Dear {$username},</p>
@@ -562,10 +562,10 @@ class NotificationManager {
                         {$htmlMessage}
                     </div>
                     <p>If you have any questions or concerns, please don't hesitate to contact us.</p>
-                    <p>Best regards,<br>KTM Management</p>
+                    <p>Best regards,<br>Management</p>
                 </div>
                 <div style='background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;'>
-                    <p>This is an automated message from KTM Railway System. Please do not reply to this email.</p>
+                    <p>This is an automated message from Railway System. Please do not reply to this email.</p>
                 </div>
             </div>";
             

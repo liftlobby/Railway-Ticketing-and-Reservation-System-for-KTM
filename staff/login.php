@@ -167,7 +167,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <div class="container">
         <div class="login-container">
             <div class="login-header">
-                <img src="../image/logo.png" alt="KTM Logo">
+                <img src="../image/train_icon.png" alt="Railway Logo">
                 <h2>Staff Login</h2>
             </div>
             

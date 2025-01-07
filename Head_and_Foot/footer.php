@@ -3,11 +3,11 @@
     <div class="footer-content">
         <div class="footer-section">
             <h3>Location of HQ</h3>
-            <p>Jalan Sultan Hishamuddin,<br>50621 Wilayah Persekutuan,<br>Kuala Lumpur.</p>
+            <p>Write something</p>
         </div>
         <div class="footer-section">
             <h3>Call Center</h3>
-            <p> +603-9779 1200</p>
+            <p>0123456789</p>
         </div>
         <div class="footer-section">
             <h3>Operation Time</h3>
@@ -15,13 +15,13 @@
         </div>
         <div class="footer-section">
             <h3>Email</h3>
-            <p>callcenter@ktmb.com.my</p>
+            <p>callcenter@railway.com</p>
         </div>
         <div class="footer-section">
             <h3>Follow Us</h3>
-            <a href="https://www.facebook.com/ktmberhad/"><img src="image\social media\fb icon.png" alt="Facebook"></a>
-            <a href="https://x.com/ktm_berhad?lang=en"><img src="image\social media\X icon.png" alt="Twitter"></a>
-            <a href="https://www.instagram.com/ktmbofficial/?hl=en"><img src="image\social media\Instagram_icon.png" alt="Instagram"></a>
+            <a href="#"><img src="image\social media\fb icon.png" alt="Facebook"></a>
+            <a href="#"><img src="image\social media\X icon.png" alt="Twitter"></a>
+            <a href="#"><img src="image\social media\Instagram_icon.png" alt="Instagram"></a>
         </div>
         <div class="footer-section">
             <h3>Links</h3>

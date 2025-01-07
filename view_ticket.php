@@ -41,7 +41,7 @@ $ticket = $result->fetch_assoc();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Ticket - KTM Railway System</title>
+    <title>View Ticket - Railway System</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style/style_viewticket.css">
 </head>
@@ -64,7 +64,7 @@ $ticket = $result->fetch_assoc();
             </div>
 
             <div class="ticket-header">
-                <h1>KTM Railway Ticket</h1>
+                <h1>Railway Ticket</h1>
                 <p>Ticket #<?php echo str_pad($ticket['ticket_id'], 6, '0', STR_PAD_LEFT); ?></p>
             </div>
 

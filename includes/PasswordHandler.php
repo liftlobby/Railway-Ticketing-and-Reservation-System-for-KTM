@@ -11,7 +11,7 @@ class PasswordHandler {
     const MAX_FAILED_ATTEMPTS = 5;
     const LOCKOUT_DURATION = 15; // minutes
     const PASSWORD_HISTORY = 5;
-    private const PEPPER = "KTM_SECURE_2024"; // Change this in production
+    private const PEPPER = "RAILWAY_SECURE_2024"; // Change this in production
 
     /**
      * Hash password using Argon2id with pepper

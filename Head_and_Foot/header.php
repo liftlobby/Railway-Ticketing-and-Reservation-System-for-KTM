@@ -110,7 +110,7 @@ if (isset($_SESSION['user_id'])) {
 <body>
     <header class="header">
         <a href="index.php">
-            <img src="image/logo.png" alt="KTM Logo">
+            <img src="image\train_icon.png" alt="railway Logo">
         </a>
         <nav>
             <?php if (isset($_SESSION['user_id'])): ?>
